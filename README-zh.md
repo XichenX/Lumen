@@ -736,8 +736,8 @@ Lumen.with(context)
 
 ## 📞 联系方式
 
-- **Issues**: [GitHub Issues](https://github.com/your-username/lumen/issues)
-- **Email**: your-email@example.com
+- **Issues**: [GitHub Issues](https://github.com/MartinLiuMingZhi/Lumen/issues)
+- **Email**: 3108531642@qq.com
 
 ---
 
