@@ -4,6 +4,9 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
+// 应用发布配置
+apply(from = rootProject.file("publish.gradle.kts"))
+
 android {
     namespace = "com.xichen.lumen.view"
     compileSdk {
@@ -38,6 +41,14 @@ android {
     }
     composeOptions {
         kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
+    }
+    
+    // 配置发布
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
     }
 }
 

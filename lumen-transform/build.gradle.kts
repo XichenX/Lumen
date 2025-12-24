@@ -3,6 +3,9 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
+// 应用发布配置
+apply(from = rootProject.file("publish.gradle.kts"))
+
 android {
     namespace = "com.xichen.lumen.transform"
     compileSdk {
@@ -31,6 +34,14 @@ android {
     }
     kotlinOptions {
         jvmTarget = "11"
+    }
+    
+    // 配置发布
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
     }
 }
 

@@ -1,0 +1,18 @@
+# JitPack 构建配置
+# JitPack 会自动检测此文件并按照配置构建
+jdk:
+  - openjdk11
+
+before_install:
+  - ./gradlew wrapper --gradle-version 8.5
+
+# 构建所有需要发布的模块
+# 注意：JitPack 会自动构建所有模块，包括聚合模块 lumen
+build:
+  commands:
+    - ./gradlew clean
+    - ./gradlew :lumen-core:publishToMavenLocal
+    - ./gradlew :lumen-view:publishToMavenLocal
+    - ./gradlew :lumen-transform:publishToMavenLocal
+    - ./gradlew :lumen:publishToMavenLocal
+

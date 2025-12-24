@@ -1,0 +1,262 @@
+name: Publish to Maven Central
+
+on:
+  push:
+    tags:
+      - 'v*'  # 当推送以 v 开头的 tag 时触发，如 v1.0.0 或 v1.0.0/develop
+  workflow_dispatch:  # 允许手动触发
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.0.0). Leave empty for auto-increment'
+        required: false
+      auto_increment:
+        description: 'Auto increment patch version (e.g., 1.0.0 -> 1.0.1)'
+        type: boolean
+        default: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 需要完整历史记录用于版本检测
+          token: ${{ secrets.GITHUB_TOKEN }}  # 用于推送版本号变更
+      
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+          cache: 'gradle'
+      
+      - name: Extract version from tag
+        id: extract_version
+        if: github.event_name == 'push'
+        run: |
+          # 从 tag 提取版本号，支持格式：
+          # - v1.0.0 -> 1.0.0
+          # - v1.0.0/develop -> 1.0.0
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG_NAME#v}  # 移除 v 前缀
+          VERSION=${VERSION%%/*}  # 移除 /develop 等后缀
+          
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION from tag: $TAG_NAME"
+      
+      - name: Get current version from gradle.properties
+        id: current_version
+        run: |
+          CURRENT_VERSION=$(grep "^VERSION_NAME=" gradle.properties | cut -d'=' -f2 || echo "0.0.0")
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version in gradle.properties: $CURRENT_VERSION"
+      
+      - name: Determine final version
+        id: final_version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # 手动触发
+            CURRENT="${{ steps.current_version.outputs.current_version }}"
+            
+            if [ -n "${{ github.event.inputs.version }}" ]; then
+              # 手动指定版本号
+              FINAL_VERSION="${{ github.event.inputs.version }}"
+              echo "Using manually specified version: $FINAL_VERSION"
+            elif [ "${{ github.event.inputs.auto_increment }}" == "true" ]; then
+              # 自动递增 patch 版本
+              FINAL_VERSION=$(echo "$CURRENT" | awk -F. '{printf "%d.%d.%d", $1, $2, $3+1}')
+              echo "Auto-incremented version: $CURRENT -> $FINAL_VERSION"
+            else
+              # 使用当前版本号
+              FINAL_VERSION="$CURRENT"
+              echo "Using current version: $FINAL_VERSION"
+            fi
+          else
+            # Tag 触发
+            TAG_VERSION="${{ steps.extract_version.outputs.version }}"
+            CURRENT="${{ steps.current_version.outputs.current_version }}"
+            
+            # 如果 tag 版本与当前版本相同，自动递增 patch
+            if [ "$TAG_VERSION" == "$CURRENT" ]; then
+              FINAL_VERSION=$(echo "$CURRENT" | awk -F. '{printf "%d.%d.%d", $1, $2, $3+1}')
+              echo "Tag version ($TAG_VERSION) matches current ($CURRENT), auto-incrementing to: $FINAL_VERSION"
+            else
+              FINAL_VERSION="$TAG_VERSION"
+              echo "Using tag version: $FINAL_VERSION (current: $CURRENT)"
+            fi
+          fi
+          
+          echo "final_version=$FINAL_VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Final version to publish: $FINAL_VERSION"
+      
+      - name: Update version in gradle.properties
+        run: |
+          VERSION=${{ steps.final_version.outputs.final_version }}
+          sed -i "s/^VERSION_NAME=.*/VERSION_NAME=$VERSION/" gradle.properties
+          echo "Updated VERSION_NAME to $VERSION"
+          cat gradle.properties | grep VERSION_NAME
+      
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+      
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      
+      - name: Build and test
+        run: ./gradlew clean build test --parallel --max-workers=4 --stacktrace
+      
+      - name: Setup GPG
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          if [ -n "$GPG_PRIVATE_KEY" ]; then
+            echo "$GPG_PRIVATE_KEY" | base64 --decode | gpg --batch --import
+            echo "GPG key imported successfully"
+            
+            # 提取密钥 ID
+            KEY_ID=$(gpg --list-secret-keys --keyid-format LONG | grep -E "^(sec|SEC)" | head -1 | awk '{print $2}' | cut -d'/' -f2)
+            echo "GPG_KEY_ID=$KEY_ID" >> $GITHUB_ENV
+            echo "GPG Key ID: $KEY_ID"
+            
+            # 导出密钥文件用于 Gradle 签名
+            gpg --export-secret-keys --armor "$KEY_ID" > secret.gpg
+            echo "GPG key exported to secret.gpg"
+          else
+            echo "Warning: GPG_PRIVATE_KEY not set, signing will be skipped"
+            echo "GPG_KEY_ID=" >> $GITHUB_ENV
+          fi
+      
+      - name: Publish to Maven Central
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          SIGNING_KEY_ID: ${{ env.GPG_KEY_ID }}
+          SIGNING_PASSWORD: ${{ secrets.GPG_PASSPHRASE }}
+          SIGNING_SECRET_KEY_RING_FILE: secret.gpg
+        run: |
+          if [ -n "$SONATYPE_USERNAME" ] && [ -n "$SONATYPE_PASSWORD" ]; then
+            echo "Publishing to Maven Central..."
+            echo "Publishing modules: lumen-core, lumen-view, lumen-transform, lumen"
+            echo "Using optimized parallel publishing with dependency management..."
+            
+            # 使用聚合任务 + 并行执行优化
+            # Gradle 会自动处理任务依赖，在满足依赖的前提下最大化并行
+            # --parallel: 并行执行独立任务
+            # --max-workers: 控制并行度（4个模块，但受依赖限制）
+            ./gradlew publishAllToMavenCentral \
+                      --parallel \
+                      --max-workers=4 \
+                      --stacktrace
+            
+            echo "✅ Published successfully to Maven Central!"
+            echo ""
+            echo "Next steps:"
+            echo "1. Login to https://s01.oss.sonatype.org"
+            echo "2. Go to Staging Repositories"
+            echo "3. Find your repository and click Close"
+            echo "4. Wait for validation, then click Release"
+            echo "5. Wait for sync to Maven Central (usually a few hours)"
+          else
+            echo "⚠️  Sonatype credentials not configured, skipping Maven Central publish"
+            echo "Building artifacts for manual upload..."
+            # 使用聚合任务 + 并行执行
+            ./gradlew publishAllToMavenLocal \
+                      --parallel \
+                      --max-workers=4
+          fi
+      
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maven-artifacts
+          path: |
+            **/build/publications/**/*.pom
+            **/build/publications/**/*.aar
+            **/build/publications/**/*.jar
+            **/build/publications/**/*.asc
+          retention-days: 30
+      
+      - name: Commit version update back to repository
+        if: github.event_name == 'push' && success()
+        run: |
+          VERSION=${{ steps.final_version.outputs.final_version }}
+          
+          # 配置 git 用户信息
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # 检查 gradle.properties 是否有变更
+          if ! git diff --quiet gradle.properties; then
+            echo "Version change detected, committing update to repository"
+            git add gradle.properties
+            git commit -m "chore: bump version to $VERSION [skip ci]"
+            
+            # 获取当前分支名（通常是 main 或 master）
+            BRANCH=$(git rev-parse --abbrev-ref HEAD)
+            echo "Pushing version update to $BRANCH branch"
+            git push origin HEAD:$BRANCH || echo "Note: Version update push skipped (may already be up to date or no permission)"
+          else
+            echo "No version change detected in gradle.properties, skipping commit"
+          fi
+      
+      - name: Create GitHub Release
+        if: github.event_name == 'push' && success()
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref }}
+          name: Release v${{ steps.final_version.outputs.final_version }}
+          body: |
+            ## 📦 Maven Central Release
+            
+            Version: **${{ steps.final_version.outputs.final_version }}**
+            
+            ### 📋 Published Modules
+            
+            - ✅ **lumen-core** - Core loading logic
+            - ✅ **lumen-view** - ImageView and Compose support
+            - ✅ **lumen-transform** - Image transformation features
+            - ✅ **lumen** - Aggregated module (includes all sub-modules)
+            
+            ### 🚀 Usage
+            
+            ```kotlin
+            repositories {
+                mavenCentral()
+            }
+            
+            dependencies {
+                // 聚合模块（推荐）- 自动包含所有子模块
+                implementation("io.github.xichenx:lumen:${{ steps.final_version.outputs.final_version }}")
+                
+                // 或独立模块
+                implementation("io.github.xichenx:lumen-core:${{ steps.final_version.outputs.final_version }}")
+                implementation("io.github.xichenx:lumen-view:${{ steps.final_version.outputs.final_version }}")
+                implementation("io.github.xichenx:lumen-transform:${{ steps.final_version.outputs.final_version }}")
+            }
+            ```
+            
+            ### 📝 Next Steps
+            
+            1. Login to [Sonatype](https://s01.oss.sonatype.org)
+            2. Go to **Staging Repositories**
+            3. Find your repository and click **Close**
+            4. Wait for validation, then click **Release**
+            5. Wait for sync to Maven Central (usually a few hours)
+            
+            ### 🔗 Links
+            
+            - [Maven Central](https://repo1.maven.org/maven2/io/github/xichenx/)
+            - [Sonatype Staging](https://s01.oss.sonatype.org)
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
