@@ -39,6 +39,10 @@
             android:name=".GifVideoXmlDemoActivity"
             android:exported="false"
             android:label="GIF Video Demo (XML)" />
+        <activity
+            android:name=".ProgressiveLoadingXmlDemoActivity"
+            android:exported="false"
+            android:label="Progressive Loading Demo (XML)" />
     </application>
 
 </manifest>

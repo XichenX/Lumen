@@ -23,6 +23,18 @@ interface Fetcher {
     suspend fun fetch(): ByteArray
 
     /**
+     * 流式获取数据（用于渐进式加载）
+     * @param onProgress 进度回调，参数为当前已读取的字节数组和进度（0.0-1.0）
+     * @return 完整的原始字节数组
+     */
+    suspend fun fetchStream(onProgress: suspend (ByteArray, Float) -> Unit): ByteArray {
+        // 默认实现：直接获取所有数据，然后调用回调
+        val data = fetch()
+        onProgress(data, 1.0f)
+        return data
+    }
+
+    /**
      * 缓存 Key
      */
     val key: String
@@ -69,6 +81,66 @@ class NetworkFetcher(
             connection.inputStream.use { input ->
                 input.readBytes()
             }
+        } catch (e: Exception) {
+            android.util.Log.e("Lumen", "Failed to fetch image from $url", e)
+            throw e
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    override suspend fun fetchStream(onProgress: suspend (ByteArray, Float) -> Unit): ByteArray = withContext(Dispatchers.IO) {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = connectTimeout
+            connection.readTimeout = readTimeout
+            connection.requestMethod = "GET"
+            
+            // 设置 User-Agent，避免某些服务器拒绝请求
+            connection.setRequestProperty("User-Agent", "Lumen-ImageLoader/1.0")
+            connection.setRequestProperty("Accept", "image/*")
+            
+            // 允许重定向
+            connection.instanceFollowRedirects = true
+            
+            connection.connect()
+
+            val responseCode = connection.responseCode
+            if (responseCode !in 200..299) {
+                val errorMessage = try {
+                    connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+                } catch (e: Exception) {
+                    "Failed to read error stream"
+                }
+                throw IllegalStateException("HTTP error code: $responseCode, message: $errorMessage")
+            }
+
+            // 获取内容长度（如果可用）
+            val contentLength = connection.contentLengthLong
+            val buffer = mutableListOf<Byte>()
+            val chunkSize = 8192 // 8KB 块大小
+            val tempBuffer = ByteArray(chunkSize)
+            var totalBytesRead = 0L
+            var bytesRead: Int
+
+            connection.inputStream.use { input ->
+                while (input.read(tempBuffer).also { bytesRead = it } != -1) {
+                    buffer.addAll(tempBuffer.sliceArray(0 until bytesRead).toList())
+                    totalBytesRead += bytesRead
+                    
+                    // 计算进度并回调
+                    val progress = if (contentLength > 0) {
+                        (totalBytesRead.toFloat() / contentLength).coerceIn(0f, 1f)
+                    } else {
+                        // 如果不知道总大小，使用已读取的字节数估算（假设最大 10MB）
+                        (totalBytesRead.toFloat() / (10 * 1024 * 1024)).coerceIn(0f, 0.95f)
+                    }
+                    
+                    onProgress(buffer.toByteArray(), progress)
+                }
+            }
+            
+            buffer.toByteArray()
         } catch (e: Exception) {
             android.util.Log.e("Lumen", "Failed to fetch image from $url", e)
             throw e

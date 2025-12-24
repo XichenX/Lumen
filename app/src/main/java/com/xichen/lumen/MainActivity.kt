@@ -99,6 +99,17 @@ fun MainScreen() {
             ) {
                 Text("GIF 和视频帧示例 (XML)")
             }
+            
+            Button(
+                onClick = {
+                    context.startActivity(Intent(context, ProgressiveLoadingXmlDemoActivity::class.java))
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                Text("渐进式加载示例 (XML)")
+            }
         }
     }
 }

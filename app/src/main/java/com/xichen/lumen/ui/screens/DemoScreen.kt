@@ -51,6 +51,11 @@ fun DemoScreen() {
             
             // GIF 和视频帧示例
             GifAndVideoSection()
+            
+            Divider()
+            
+            // 渐进式加载示例
+            ProgressiveLoadingSection()
         }
     }
 }

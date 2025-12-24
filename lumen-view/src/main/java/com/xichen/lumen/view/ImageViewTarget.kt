@@ -73,6 +73,11 @@ class ImageViewTarget(
                                 // 加载中，占位图已在上面显示
                                 android.util.Log.d("Lumen", "Loading image: ${request.data.key}")
                             }
+                            is ImageState.Progressive -> {
+                                // 渐进式加载：显示预览图
+                                android.util.Log.d("Lumen", "Progressive loading image: ${request.data.key}, progress: ${state.progress}")
+                                imageView.setImageBitmap(state.bitmap)
+                            }
                             is ImageState.Success -> {
                                 android.util.Log.d("Lumen", "Successfully loaded image: ${request.data.key}, size: ${state.bitmap.width}x${state.bitmap.height}")
                                 imageView.setImageBitmap(state.bitmap)

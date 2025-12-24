@@ -96,6 +96,15 @@ fun LumenImage(
                 CircularProgressIndicator()
             }
         }
+        is ImageState.Progressive -> {
+            // 显示渐进式加载的预览图
+            Image(
+                bitmap = state.bitmap.asImageBitmap(),
+                contentDescription = contentDescription,
+                modifier = modifier,
+                contentScale = contentScale
+            )
+        }
         is ImageState.Success -> {
             Image(
                 bitmap = state.bitmap.asImageBitmap(),

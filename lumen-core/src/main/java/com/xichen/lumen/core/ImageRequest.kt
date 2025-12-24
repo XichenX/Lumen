@@ -15,6 +15,7 @@ import java.io.File
  * @param decryptor 解密器（可选）
  * @param transformers 转换器列表（可选）
  * @param priority 加载优先级
+ * @param progressiveLoading 是否启用渐进式加载（仅对网络图片有效，默认 false）
  */
 data class ImageRequest(
     val data: ImageData,
@@ -22,7 +23,8 @@ data class ImageRequest(
     val error: Drawable? = null,
     val decryptor: ImageDecryptor? = null,
     val transformers: List<BitmapTransformer> = emptyList(),
-    val priority: Priority = Priority.NORMAL
+    val priority: Priority = Priority.NORMAL,
+    val progressiveLoading: Boolean = false
 ) {
     /**
      * 生成缓存 Key（包含转换器）

@@ -2,6 +2,7 @@ package com.xichen.lumen.core
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -98,17 +99,62 @@ class Lumen private constructor(
                 else -> {
                     // 3. 检查磁盘缓存（使用数据源 key，不包含解密器和转换器）
                     val dataSourceCacheKey = data.key
-                    var rawData: ByteArray = diskCache.get(dataSourceCacheKey) ?: run {
-                        // 4. 如果磁盘缓存未命中，从数据源获取原始数据
-                        val fetcher = FetcherFactory.create(context, data)
-                            ?: throw IllegalStateException("Unsupported data source: $data")
-                        val fetchedData = withContext(Dispatchers.IO) {
-                            fetcher.fetch()
+                    val rawData: ByteArray
+                    val useProgressiveLoading = request.progressiveLoading && data is ImageData.Url
+                    
+                    if (useProgressiveLoading && diskCache.get(dataSourceCacheKey) == null) {
+                        // 渐进式加载：流式读取并逐步解码
+                        val fetcher = FetcherFactory.create(context, data) as? NetworkFetcher
+                            ?: throw IllegalStateException("Progressive loading only supports network URLs")
+                        
+                        // 使用流式获取和渐进式解码
+                        rawData = fetcher.fetchStream { partialData, progress ->
+                            // 尝试渐进式解码部分数据
+                            try {
+                                // 检测是否为渐进式 JPEG 或数据量足够大
+                                if (Decoder.isProgressiveJpeg(partialData) || partialData.size > 1024) {
+                                    // 在 IO 线程中解码预览图
+                                    val previewBitmap = withContext(Dispatchers.Default) {
+                                        try {
+                                            // 尝试解码当前数据
+                                            val options = BitmapFactory.Options().apply {
+                                                inJustDecodeBounds = false
+                                                // 对于预览图，可以使用较大的采样率以节省内存
+                                                inSampleSize = if (partialData.size < 50000) 4 else 2
+                                            }
+                                            BitmapFactory.decodeByteArray(partialData, 0, partialData.size, options)
+                                        } catch (e: Exception) {
+                                            null
+                                        }
+                                    }
+                                    
+                                    // 如果成功解码预览图，发送渐进式状态
+                                    previewBitmap?.let { bitmap ->
+                                        emit(ImageState.Progressive(bitmap, progress))
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                // 渐进式解码失败不影响最终加载
+                                android.util.Log.d("Lumen", "Progressive decode failed: ${e.message}")
+                            }
                         }
+                        
+                        // 存入磁盘缓存
+                        diskCache.put(dataSourceCacheKey, rawData)
+                    } else {
+                        // 普通加载：从缓存或数据源获取
+                        rawData = diskCache.get(dataSourceCacheKey) ?: run {
+                            // 4. 如果磁盘缓存未命中，从数据源获取原始数据
+                            val fetcher = FetcherFactory.create(context, data)
+                                ?: throw IllegalStateException("Unsupported data source: $data")
+                            val fetchedData = withContext(Dispatchers.IO) {
+                                fetcher.fetch()
+                            }
 
-                        // 5. 存入磁盘缓存（存储原始数据，可能是加密的）
-                        diskCache.put(dataSourceCacheKey, fetchedData)
-                        fetchedData
+                            // 5. 存入磁盘缓存（存储原始数据，可能是加密的）
+                            diskCache.put(dataSourceCacheKey, fetchedData)
+                            fetchedData
+                        }
                     }
 
                     // 6. 解密（如果需要）

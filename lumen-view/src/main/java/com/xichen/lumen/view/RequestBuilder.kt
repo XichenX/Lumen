@@ -34,6 +34,7 @@ class RequestBuilder(
     private var decryptor: ImageDecryptor? = null
     private val transformers = mutableListOf<BitmapTransformer>()
     private var priority: ImageRequest.Priority = ImageRequest.Priority.NORMAL
+    private var progressiveLoading: Boolean = false
 
     /**
      * 设置占位图
@@ -94,6 +95,23 @@ class RequestBuilder(
     }
 
     /**
+     * 启用渐进式加载
+     * 仅对网络图片有效，在图片下载过程中逐步显示从低质量到高质量的预览图
+     * 
+     * 使用示例：
+     * ```
+     * Lumen.with(context)
+     *     .load("https://example.com/image.jpg") {
+     *         progressiveLoading()
+     *     }
+     *     .into(imageView)
+     * ```
+     */
+    fun progressiveLoading() {
+        this.progressiveLoading = true
+    }
+
+    /**
      * 构建 ImageRequest
      */
     internal fun build(context: Context): ImageRequest {
@@ -110,7 +128,8 @@ class RequestBuilder(
             error = finalError,
             decryptor = decryptor,
             transformers = transformers,
-            priority = priority
+            priority = priority,
+            progressiveLoading = progressiveLoading
         )
     }
 }

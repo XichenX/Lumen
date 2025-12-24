@@ -15,6 +15,13 @@ sealed class ImageState {
     object Loading : ImageState()
 
     /**
+     * 渐进式加载中间状态（显示低质量预览图）
+     * @param bitmap 当前已解码的预览 Bitmap（可能是不完整的）
+     * @param progress 加载进度（0.0 - 1.0）
+     */
+    data class Progressive(val bitmap: Bitmap, val progress: Float = 0f) : ImageState()
+
+    /**
      * 加载成功状态（静态图片）
      * @param bitmap 加载成功的 Bitmap
      */
