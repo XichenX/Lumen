@@ -9,6 +9,8 @@
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-purple?style=flat&logo=kotlin)
 ![Android](https://img.shields.io/badge/Android-API%2021+-green?style=flat&logo=android)
 ![License](https://img.shields.io/badge/License-Apache%202.0-yellow?style=flat)
+![Maven Central](https://img.shields.io/maven-central/v/io.github.xichenx/lumen?label=Maven%20Central&style=flat)
+![JitPack](https://img.shields.io/jitpack/v/github/XichenX/Lumen?label=JitPack&style=flat)
 
 **A Kotlin-first Android image loading library for business-friendly, AI scenarios, and list scenarios**
 
@@ -140,23 +142,45 @@ While there are excellent image loading libraries like Glide and Coil in the And
 
 ### 1. Add Dependencies
 
-**Simple way (recommended):** Just add one dependency to get all features:
+**Maven Central (Recommended):**
 
 ```kotlin
+repositories {
+    mavenCentral()
+}
+
 dependencies {
-    implementation("com.xichen.lumen:lumen:1.0.0")
+    // Simple way: Add one dependency to get all features
+    implementation("io.github.xichenx:lumen:0.0.1")
+    
+    // Or modular way: Add specific modules only
+    // implementation("io.github.xichenx:lumen-core:0.0.1")      // Core only
+    // implementation("io.github.xichenx:lumen-view:0.0.1")      // View support
+    // implementation("io.github.xichenx:lumen-transform:0.0.1") // Transform support
 }
 ```
 
-**Modular way (optional):** If you only need specific modules:
+**JitPack (Alternative):**
 
 ```kotlin
+repositories {
+    maven { url = uri("https://jitpack.io") }
+}
+
 dependencies {
-    implementation("com.xichen.lumen:lumen-core:1.0.0")      // Core only
-    implementation("com.xichen.lumen:lumen-view:1.0.0")      // View support
-    implementation("com.xichen.lumen:lumen-transform:1.0.0") // Transform support
+    // Simple way: Add one dependency to get all features
+    implementation("com.github.XichenX:Lumen:0.0.1")
+    
+    // Or modular way: Add specific modules only
+    // implementation("com.github.XichenX:lumen-core:0.0.1")      // Core only
+    // implementation("com.github.XichenX:lumen-view:0.0.1")      // View support
+    // implementation("com.github.XichenX:lumen-transform:0.0.1") // Transform support
 }
 ```
+
+> **Note:** Both Maven Central and JitPack use the same version numbers, so you can switch between them seamlessly. The only difference is the `groupId`:
+> - Maven Central: `io.github.xichenx:lumen:0.0.1`
+> - JitPack: `com.github.XichenX:Lumen:0.0.1`
 
 ### 2. Add Permissions
 
@@ -807,10 +831,46 @@ Special thanks to the Glide and Coil projects for their tremendous contributions
 
 ---
 
+## 📦 Publishing & Distribution
+
+Lumen is published to both **Maven Central** and **JitPack** with **guaranteed version consistency**.
+
+### Version Consistency
+
+Both repositories use **exactly the same version numbers**, allowing seamless switching:
+
+| Repository | Group ID | Artifact ID | Version | Status |
+|------------|----------|-------------|---------|--------|
+| Maven Central | `io.github.xichenx` | `lumen` | `0.0.1` | ✅ Official |
+| JitPack | `com.github.XichenX` | `Lumen` | `0.0.1` | ✅ Alternative |
+
+**Example:**
+```kotlin
+// Both use version 0.0.1 - completely interchangeable!
+implementation("io.github.xichenx:lumen:0.0.1")        // Maven Central
+implementation("com.github.XichenX:Lumen:0.0.1")       // JitPack
+```
+
+### Optimized Publishing Workflow
+
+We use a **unified GitHub Actions workflow** that optimizes the publishing process:
+
+- ✅ **Single Build**: Builds once, reuses artifacts for both platforms
+- ✅ **Parallel Publishing**: Publishes to Maven Central and JitPack simultaneously
+- ✅ **Version Sync**: Automatically ensures version consistency
+- ✅ **Time Savings**: Reduces total publishing time by ~33% through parallel execution
+
+**Workflow Structure:**
+```
+Pre-check → Build (once) → [Maven Central + JitPack] (parallel) → Finalize
+```
+
+For detailed publishing instructions, see [PUBLISH.md](PUBLISH.md).
+
 ## 📞 Contact
 
-- **Issues**: [GitHub Issues](https://github.com/MartinLiuMingZhi/Lumen/issues)
-- **Email**: 3108531642@qq.com
+- **Issues**: [GitHub Issues](https://github.com/XichenX/Lumen/issues)
+- **Repository**: [https://github.com/XichenX/Lumen](https://github.com/XichenX/Lumen)
 
 ---
 

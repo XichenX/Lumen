@@ -8,6 +8,8 @@
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-purple?style=flat&logo=kotlin)
 ![Android](https://img.shields.io/badge/Android-API%2021+-green?style=flat&logo=android)
 ![License](https://img.shields.io/badge/License-Apache%202.0-yellow?style=flat)
+![Maven Central](https://img.shields.io/maven-central/v/io.github.xichenx/lumen?label=Maven%20Central&style=flat)
+![JitPack](https://img.shields.io/jitpack/v/github/XichenX/Lumen?label=JitPack&style=flat)
 
 **一个 Kotlin-first 的 Android 图片加载库，面向业务友好、AI 场景、列表场景**
 
@@ -139,23 +141,45 @@
 
 ### 1. 添加依赖
 
-**简单方式（推荐）：** 只需添加一个依赖即可使用所有功能：
+**Maven Central（推荐）：**
 
 ```kotlin
+repositories {
+    mavenCentral()
+}
+
 dependencies {
-    implementation("com.xichen.lumen:lumen:1.0.0")
+    // 简单方式：添加一个依赖即可使用所有功能
+    implementation("io.github.xichenx:lumen:0.0.1")
+    
+    // 或模块化方式：仅添加特定模块
+    // implementation("io.github.xichenx:lumen-core:0.0.1")      // 仅核心功能
+    // implementation("io.github.xichenx:lumen-view:0.0.1")      // View 支持
+    // implementation("io.github.xichenx:lumen-transform:0.0.1") // 转换功能
 }
 ```
 
-**模块化方式（可选）：** 如果只需要特定模块：
+**JitPack（备选）：**
 
 ```kotlin
+repositories {
+    maven { url = uri("https://jitpack.io") }
+}
+
 dependencies {
-    implementation("com.xichen.lumen:lumen-core:1.0.0")      // 仅核心功能
-    implementation("com.xichen.lumen:lumen-view:1.0.0")      // View 支持
-    implementation("com.xichen.lumen:lumen-transform:1.0.0") // 转换功能
+    // 简单方式：添加一个依赖即可使用所有功能
+    implementation("com.github.XichenX:Lumen:0.0.1")
+    
+    // 或模块化方式：仅添加特定模块
+    // implementation("com.github.XichenX:lumen-core:0.0.1")      // 仅核心功能
+    // implementation("com.github.XichenX:lumen-view:0.0.1")      // View 支持
+    // implementation("com.github.XichenX:lumen-transform:0.0.1") // 转换功能
 }
 ```
+
+> **注意：** Maven Central 和 JitPack 使用相同的版本号，可以无缝切换。唯一的区别是 `groupId`：
+> - Maven Central: `io.github.xichenx:lumen:0.0.1`
+> - JitPack: `com.github.XichenX:Lumen:0.0.1`
 
 ### 2. 添加权限
 
@@ -806,10 +830,46 @@ Lumen.with(context)
 
 ---
 
+## 📦 发布与分发
+
+Lumen 同时发布到 **Maven Central** 和 **JitPack**，并**保证版本号完全一致**。
+
+### 版本一致性
+
+两个仓库使用**完全相同的版本号**，可以无缝切换：
+
+| 仓库 | Group ID | Artifact ID | 版本 | 状态 |
+|------|----------|-------------|------|------|
+| Maven Central | `io.github.xichenx` | `lumen` | `0.0.1` | ✅ 官方 |
+| JitPack | `com.github.XichenX` | `Lumen` | `0.0.1` | ✅ 备选 |
+
+**示例：**
+```kotlin
+// 两者都使用版本 0.0.1 - 完全可互换！
+implementation("io.github.xichenx:lumen:0.0.1")        // Maven Central
+implementation("com.github.XichenX:Lumen:0.0.1")       // JitPack
+```
+
+### 优化的发布工作流
+
+我们使用**统一的 GitHub Actions 工作流**，优化发布流程：
+
+- ✅ **单次构建**：构建一次，两个平台复用构建产物
+- ✅ **并行发布**：同时发布到 Maven Central 和 JitPack
+- ✅ **版本同步**：自动确保版本一致性
+- ✅ **时间节省**：通过并行执行减少约 33% 的总时间
+
+**工作流结构：**
+```
+预检查 → 构建（一次） → [Maven Central + JitPack]（并行） → 最终化
+```
+
+详细发布说明请参阅 [PUBLISH.md](PUBLISH.md)。
+
 ## 📞 联系方式
 
-- **Issues**: [GitHub Issues](https://github.com/MartinLiuMingZhi/Lumen/issues)
-- **Email**: 3108531642@qq.com
+- **Issues**: [GitHub Issues](https://github.com/XichenX/Lumen/issues)
+- **仓库**: [https://github.com/XichenX/Lumen](https://github.com/XichenX/Lumen)
 
 ---
 
