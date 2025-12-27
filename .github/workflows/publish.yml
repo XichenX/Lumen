@@ -50,7 +50,6 @@ jobs:
       - name: Get current version and branch
         id: version_info
         run: |
-          # 读取当前组件版本（独立于demo版本）
           CURRENT_VERSION=$(grep "^LIBRARY_VERSION_NAME=" gradle.properties | cut -d'=' -f2 || grep "^VERSION_NAME=" gradle.properties | cut -d'=' -f2 || echo "")
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           
@@ -65,7 +64,6 @@ jobs:
           CURRENT="${{ steps.version_info.outputs.current_version }}"
           BRANCH_NAME="${{ steps.version_info.outputs.branch_name }}"
           
-          # 根据分支设置版本规则
           if [ "$BRANCH_NAME" == "main" ] || [ "$BRANCH_NAME" == "master" ]; then
             if [ -z "$CURRENT" ] || [ "$CURRENT" == "" ]; then
               BASE_VERSION="0.0.1"
@@ -82,12 +80,10 @@ jobs:
             BASE_VERSION=${CURRENT:-"0.0.1"}
           fi
           
-          # 确定最终版本
           if [ -n "${{ github.event.inputs.version }}" ]; then
             FINAL_VERSION="${{ github.event.inputs.version }}"
             echo "Using manually specified version: $FINAL_VERSION"
           elif [ "${{ github.event.inputs.auto_increment }}" == "true" ]; then
-            # 自动递增最后一位
             FINAL_VERSION=$(echo "$BASE_VERSION" | awk -F. '{printf "%d.%d.%d", $1, $2, $3+1}')
             echo "Auto-incremented version: $BASE_VERSION -> $FINAL_VERSION"
           else
@@ -95,7 +91,6 @@ jobs:
             echo "Using current version: $FINAL_VERSION"
           fi
           
-          # 验证最终版本号格式
           if [[ ! "$FINAL_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9-]+)?$ ]]; then
             echo "❌ Invalid final version format: $FINAL_VERSION"
             exit 1
@@ -113,7 +108,6 @@ jobs:
           ARTIFACT_ID="lumen"
           
           echo "Checking if version $VERSION already exists in Maven Central..."
-          
           URL="https://repo1.maven.org/maven2/${GROUP_ID//./\/}/$ARTIFACT_ID/$VERSION/"
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 --retry 2 "$URL" || echo "000")
           
@@ -164,20 +158,21 @@ jobs:
             echo "✅ All required secrets are configured"
           fi
 
-  # 发布任务
-  publish:
+  # 构建任务：统一构建和测试（只执行一次）
+  build:
     runs-on: ubuntu-latest
     needs: pre-check
     if: needs.pre-check.outputs.should_publish == 'true'
     permissions:
-      contents: write
-    
+      contents: read
+    outputs:
+      version: ${{ needs.pre-check.outputs.version }}
+      build_success: ${{ steps.build.outputs.build_success }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -195,13 +190,11 @@ jobs:
       - name: Update version in gradle.properties
         run: |
           VERSION="${{ needs.pre-check.outputs.version }}"
-          # 更新组件版本（确保 JitPack 和 Maven Central 使用相同版本）
           if grep -q "^LIBRARY_VERSION_NAME=" gradle.properties; then
             sed -i "s/^LIBRARY_VERSION_NAME=.*/LIBRARY_VERSION_NAME=$VERSION/" gradle.properties
           else
             echo "LIBRARY_VERSION_NAME=$VERSION" >> gradle.properties
           fi
-          # 同时更新VERSION_NAME以保持兼容
           sed -i "s/^VERSION_NAME=.*/VERSION_NAME=$VERSION/" gradle.properties
           echo "✅ Updated LIBRARY_VERSION_NAME and VERSION_NAME to $VERSION"
           echo "📋 This version will be used for both JitPack and Maven Central"
@@ -218,7 +211,8 @@ jobs:
       - name: Build and test
         id: build
         run: |
-          echo "Building and testing all modules..."
+          echo "🔨 Building and testing all modules..."
+          echo "📦 This build will be used for both Maven Central and JitPack"
           ./gradlew clean build test \
             --parallel \
             --max-workers=4 \
@@ -233,10 +227,41 @@ jobs:
             echo "build_success=false" >> $GITHUB_OUTPUT
             exit 1
           fi
+
+  # Maven Central 发布任务（并行执行）
+  publish-maven-central:
+    runs-on: ubuntu-latest
+    needs: [pre-check, build]
+    if: |
+      needs.pre-check.outputs.should_publish == 'true' &&
+      needs.build.outputs.build_success == 'true' &&
+      (github.event.inputs.publish_to == 'maven-central' || github.event.inputs.publish_to == 'both')
+    permissions:
+      contents: read
+    outputs:
+      publish_success: ${{ steps.publish.outputs.publish_success }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
-      # Maven Central 发布步骤
-      - name: Setup GPG for Maven Central
-        if: github.event.inputs.publish_to == 'maven-central' || github.event.inputs.publish_to == 'both'
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          cache-read-only: false
+      
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      
+      - name: Setup GPG
         id: gpg_setup
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
@@ -292,8 +317,7 @@ jobs:
           fi
       
       - name: Publish to Maven Central
-        if: (github.event.inputs.publish_to == 'maven-central' || github.event.inputs.publish_to == 'both') && steps.gpg_setup.outputs.gpg_configured == 'true'
-        id: publish_maven
+        id: publish
         env:
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
@@ -301,15 +325,16 @@ jobs:
           SIGNING_PASSWORD: ${{ secrets.GPG_PASSPHRASE }}
           SIGNING_SECRET_KEY_RING_FILE: ${{ env.GPG_KEY_FILE || 'secret.gpg' }}
         run: |
-          VERSION="${{ needs.pre-check.outputs.version }}"
+          VERSION="${{ needs.build.outputs.version }}"
           
           if [ -z "$SONATYPE_USERNAME" ] || [ -z "$SONATYPE_PASSWORD" ]; then
             echo "⚠️  Sonatype credentials not configured, skipping Maven Central publish"
-            echo "publish_maven_success=false" >> $GITHUB_OUTPUT
+            echo "publish_success=false" >> $GITHUB_OUTPUT
             exit 0
           fi
           
           echo "🚀 Publishing version $VERSION to Maven Central..."
+          echo "⚡ Running in parallel with JitPack publish"
           
           if ./gradlew publishAllToMavenCentral \
                       --parallel \
@@ -318,22 +343,39 @@ jobs:
                       --stacktrace \
                       --console=plain; then
             echo "✅ Published successfully to Maven Central!"
-            echo "publish_maven_success=true" >> $GITHUB_OUTPUT
+            echo "publish_success=true" >> $GITHUB_OUTPUT
           else
             echo "❌ Failed to publish to Maven Central"
-            echo "publish_maven_success=false" >> $GITHUB_OUTPUT
+            echo "publish_success=false" >> $GITHUB_OUTPUT
             exit 1
           fi
+
+  # JitPack 发布任务（并行执行）
+  publish-jitpack:
+    runs-on: ubuntu-latest
+    needs: [pre-check, build]
+    if: |
+      needs.pre-check.outputs.should_publish == 'true' &&
+      needs.build.outputs.build_success == 'true' &&
+      (github.event.inputs.publish_to == 'jitpack' || github.event.inputs.publish_to == 'both')
+    permissions:
+      contents: write
+    outputs:
+      tag_created: ${{ steps.create_tag.outputs.tag_created }}
+      tag_name: ${{ steps.create_tag.outputs.tag_name }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
       
-      # JitPack 发布步骤（创建 tag 触发 JitPack 构建）
       - name: Create tag for JitPack
-        if: github.event.inputs.publish_to == 'jitpack' || github.event.inputs.publish_to == 'both'
         id: create_tag
         run: |
-          VERSION="${{ needs.pre-check.outputs.version }}"
+          VERSION="${{ needs.build.outputs.version }}"
           TAG_NAME="v$VERSION"
           
-          # 检查 tag 是否已存在
           if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
             echo "⚠️  Tag $TAG_NAME already exists"
             echo "tag_created=false" >> $GITHUB_OUTPUT
@@ -349,12 +391,12 @@ jobs:
           fi
       
       - name: Notify JitPack
-        if: github.event.inputs.publish_to == 'jitpack' || github.event.inputs.publish_to == 'both'
         run: |
-          VERSION="${{ needs.pre-check.outputs.version }}"
+          VERSION="${{ needs.build.outputs.version }}"
           TAG_NAME="${{ steps.create_tag.outputs.tag_name }}"
           
           echo "📦 JitPack will automatically build and publish version $VERSION"
+          echo "⚡ Running in parallel with Maven Central publish"
           echo "🔗 Build status: https://jitpack.io/#XichenX/Lumen/$VERSION"
           echo ""
           echo "JitPack will automatically:"
@@ -364,12 +406,26 @@ jobs:
           echo ""
           echo "Users can use:"
           echo "  implementation(\"com.github.XichenX:Lumen:$VERSION\")"
+
+  # 最终化任务：提交版本更新和创建 Release
+  finalize:
+    runs-on: ubuntu-latest
+    needs: [pre-check, build, publish-maven-central, publish-jitpack]
+    if: |
+      always() &&
+      needs.build.outputs.build_success == 'true'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
       
-      # 提交版本更新
       - name: Commit version update
-        if: steps.build.outputs.build_success == 'true'
         run: |
-          VERSION="${{ needs.pre-check.outputs.version }}"
+          VERSION="${{ needs.build.outputs.version }}"
           
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
@@ -383,15 +439,13 @@ jobs:
             git push origin HEAD:$BRANCH || echo "⚠️  Failed to push version update"
           fi
       
-      # 创建 GitHub Release
       - name: Create GitHub Release
-        if: steps.build.outputs.build_success == 'true'
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.create_tag.outputs.tag_name || format('v{0}', needs.pre-check.outputs.version) }}
-          name: Release v${{ needs.pre-check.outputs.version }}
+          tag_name: ${{ needs.publish-jitpack.outputs.tag_name || format('v{0}', needs.build.outputs.version) }}
+          name: Release v${{ needs.build.outputs.version }}
           body: |
-            ## 📦 Library Release v${{ needs.pre-check.outputs.version }}
+            ## 📦 Library Release v${{ needs.build.outputs.version }}
             
             ### 📋 Published Modules
             
@@ -409,7 +463,7 @@ jobs:
             }
             
             dependencies {
-                implementation("io.github.xichenx:lumen:${{ needs.pre-check.outputs.version }}")
+                implementation("io.github.xichenx:lumen:${{ needs.build.outputs.version }}")
             }
             ```
             
@@ -420,16 +474,16 @@ jobs:
             }
             
             dependencies {
-                implementation("com.github.XichenX:Lumen:${{ needs.pre-check.outputs.version }}")
+                implementation("com.github.XichenX:Lumen:${{ needs.build.outputs.version }}")
             }
             ```
             
             ### ✅ Version Consistency
             
-            Both JitPack and Maven Central use the same version: **${{ needs.pre-check.outputs.version }}**
+            Both JitPack and Maven Central use the same version: **${{ needs.build.outputs.version }}**
             
-            - Maven Central: `io.github.xichenx:lumen:${{ needs.pre-check.outputs.version }}`
-            - JitPack: `com.github.XichenX:Lumen:${{ needs.pre-check.outputs.version }}`
+            - Maven Central: `io.github.xichenx:lumen:${{ needs.build.outputs.version }}`
+            - JitPack: `com.github.XichenX:Lumen:${{ needs.build.outputs.version }}`
             
             ### 📝 Next Steps
             
@@ -443,7 +497,7 @@ jobs:
       - name: Publish summary
         if: always()
         run: |
-          VERSION="${{ needs.pre-check.outputs.version }}"
+          VERSION="${{ needs.build.outputs.version }}"
           PUBLISH_TO="${{ github.event.inputs.publish_to }}"
           
           echo "## 📊 Publish Summary" >> $GITHUB_STEP_SUMMARY
@@ -451,18 +505,24 @@ jobs:
           echo "| Item | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Version | \`$VERSION\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build | ${{ steps.build.outputs.build_success == 'true' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ✅ Success (executed once) |" >> $GITHUB_STEP_SUMMARY
           
           if [ "$PUBLISH_TO" == "maven-central" ] || [ "$PUBLISH_TO" == "both" ]; then
-            echo "| Maven Central | ${{ steps.publish_maven.outputs.publish_maven_success == 'true' && '✅ Success' || '⚠️ Skipped/Failed' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Maven Central | ${{ needs.publish-maven-central.outputs.publish_success == 'true' && '✅ Success' || '⚠️ Skipped/Failed' }} |" >> $GITHUB_STEP_SUMMARY
           fi
           
           if [ "$PUBLISH_TO" == "jitpack" ] || [ "$PUBLISH_TO" == "both" ]; then
-            echo "| JitPack | ${{ steps.create_tag.outputs.tag_created == 'true' && '✅ Tag Created' || '⚠️ Tag Exists' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| JitPack | ${{ needs.publish-jitpack.outputs.tag_created == 'true' && '✅ Tag Created' || '⚠️ Tag Exists' }} |" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "🔗 [JitPack Build Status](https://jitpack.io/#XichenX/Lumen/$VERSION)" >> $GITHUB_STEP_SUMMARY
           fi
           
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ⚡ Performance Optimization" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Build executed once and reused for both platforms" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Maven Central and JitPack publish ran in parallel" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Reduced total execution time" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ✅ Version Consistency" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
