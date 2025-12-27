@@ -106,31 +106,45 @@ afterEvaluate {
     }
     
     // Maven Central 仓库配置（仅非 JitPack 时使用）
+    // 使用 Central Publishing Portal（OSSRH 将于 2025-06-30 停止服务）
+    // 参考：https://central.sonatype.org/news/20250326_ossrh_sunset/
     if (!isJitPack) {
         publishing.repositories {
             maven {
                 name = "MavenCentral"
+                
+                // Central Publishing Portal URL
+                // 注意：虽然 URL 相同，但认证方式改为使用 Central Token
                 val releasesRepoUrl = "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
                 val snapshotsRepoUrl = "https://s01.oss.sonatype.org/content/repositories/snapshots/"
+                
                 url = uri(if (versionName.endsWith("SNAPSHOT")) snapshotsRepoUrl else releasesRepoUrl)
                 
                 credentials {
+                    // Central Publishing Portal 使用 Token 认证
+                    // 注意：变量名保持 SONATYPE_USERNAME 和 SONATYPE_PASSWORD 以保持兼容性
+                    // SONATYPE_USERNAME: Central Portal 的用户名（短用户名）
+                    // SONATYPE_PASSWORD: Central Portal 的专属 Token（虽然叫 PASSWORD，但实际是 Token）
                     val sonatypeUsername = project.findProperty("SONATYPE_USERNAME") as String?
                         ?: System.getenv("SONATYPE_USERNAME")
-                    val sonatypePassword = project.findProperty("SONATYPE_PASSWORD") as String?
+                    val sonatypeToken = project.findProperty("SONATYPE_PASSWORD") as String?
                         ?: System.getenv("SONATYPE_PASSWORD")
                     
                     username = sonatypeUsername
-                    password = sonatypePassword
+                    password = sonatypeToken
                     
-                    // 调试信息（不打印实际密码）
-                    if (sonatypeUsername.isNullOrBlank() || sonatypePassword.isNullOrBlank()) {
-                        logger.warn("⚠️  Sonatype credentials are missing or empty")
+                    // 调试信息（不打印实际 Token）
+                    if (sonatypeUsername.isNullOrBlank() || sonatypeToken.isNullOrBlank()) {
+                        logger.warn("⚠️  Central Publishing Portal credentials are missing or empty")
                         logger.warn("   SONATYPE_USERNAME: ${if (sonatypeUsername.isNullOrBlank()) "not set" else "set (${sonatypeUsername.length} chars)"}")
-                        logger.warn("   SONATYPE_PASSWORD: ${if (sonatypePassword.isNullOrBlank()) "not set" else "set (${sonatypePassword.length} chars)"}")
-                        logger.warn("   Make sure SONATYPE_USERNAME and SONATYPE_PASSWORD are set in GitHub Secrets")
+                        logger.warn("   SONATYPE_PASSWORD (Central Token): ${if (sonatypeToken.isNullOrBlank()) "not set" else "set (${sonatypeToken.length} chars)"}")
+                        logger.warn("   Make sure SONATYPE_USERNAME and SONATYPE_PASSWORD (Central Token) are set in GitHub Secrets")
+                        logger.warn("   Get your Central Token from: https://central.sonatype.com/ → Profile → User Token")
                     } else {
-                        logger.info("✅ Sonatype credentials configured (username: ${sonatypeUsername.take(3)}***, password: ${"*".repeat(sonatypePassword.length)})")
+                        logger.info("✅ Central Publishing Portal credentials configured")
+                        logger.info("   Username: ${sonatypeUsername.take(3)}*** (length: ${sonatypeUsername.length})")
+                        logger.info("   Central Token: ${"*".repeat(sonatypeToken.length)} (length: ${sonatypeToken.length})")
+                        logger.info("   Using Central Publishing Portal (OSSRH will end on 2025-06-30)")
                     }
                 }
             }

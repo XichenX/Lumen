@@ -459,17 +459,23 @@ jobs:
           fi
           
           # 验证凭据（不打印实际值）
-          echo "🔐 Verifying Sonatype credentials..."
+          echo "🔐 Verifying Central Publishing Portal credentials..."
           USERNAME_LEN=${#SONATYPE_USERNAME}
-          PASSWORD_LEN=${#SONATYPE_PASSWORD}
+          TOKEN_LEN=${#SONATYPE_PASSWORD}
           echo "   Username: ${SONATYPE_USERNAME:0:3}*** (length: $USERNAME_LEN)"
-          echo "   Password: $(printf '*%.0s' $(seq 1 $PASSWORD_LEN)) (length: $PASSWORD_LEN)"
+          echo "   Central Token: $(printf '*%.0s' $(seq 1 $TOKEN_LEN)) (length: $TOKEN_LEN)"
           echo "   Group ID: io.github.xichenx"
           echo ""
+          echo "📋 Using Central Publishing Portal (OSSRH will end on 2025-06-30)"
+          echo "💡 Note: Variable names SONATYPE_USERNAME and SONATYPE_PASSWORD are kept for compatibility"
+          echo "   - SONATYPE_USERNAME: Your Central Portal username"
+          echo "   - SONATYPE_PASSWORD: Your Central Portal Token (variable name says 'PASSWORD' but use Token!)"
+          echo ""
           echo "⚠️  If you get 401 errors, check:"
-          echo "   1. SONATYPE_USERNAME and SONATYPE_PASSWORD are correct in GitHub Secrets"
-          echo "   2. Your Sonatype account has access to groupId 'io.github.xichenx'"
-          echo "   3. You may need to use a token instead of password (check Sonatype settings)"
+          echo "   1. SONATYPE_USERNAME: Your Central Portal username (short username)"
+          echo "   2. SONATYPE_PASSWORD: Your Central Portal Token (not password!)"
+          echo "   3. Get your Token from: https://central.sonatype.com/ → Profile → User Token"
+          echo "   4. Your namespace 'io.github.xichenx' must be registered and verified in Central Portal"
           echo ""
           
           echo "🚀 Publishing version $VERSION to Maven Central..."

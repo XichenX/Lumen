@@ -92,12 +92,23 @@ git push origin v1.0.0
 #### Maven Central 发布所需
 
 **SONATYPE_USERNAME**
-- 名称: `SONATYPE_USERNAME`
-- 值: 你的 Sonatype 用户名
+- 名称: `SONATYPE_USERNAME`（保持不变，无需重命名）
+- 值: 你的 **Central Publishing Portal 用户名**（短用户名）
+- 📝 从 https://central.sonatype.com/ → Profile 获取
 
 **SONATYPE_PASSWORD**
-- 名称: `SONATYPE_PASSWORD`
-- 值: 你的 Sonatype 密码
+- 名称: `SONATYPE_PASSWORD`（保持不变，无需重命名）
+- 值: 你的 **Central Publishing Portal 专属 Token**（虽然变量名叫 PASSWORD，但实际存储的是 Token）
+- ⚠️ **重要**：必须使用 Central Token，不能使用密码
+- 💡 **提示**：变量名保持 `SONATYPE_PASSWORD` 是为了向后兼容，但实际值应该是 Central Token
+- 📝 **获取 Token**：
+  1. 登录 https://central.sonatype.com/
+  2. 点击右上角用户名 → Profile
+  3. 找到 User Token 部分
+  4. 点击 Access User Token 或 Generate User Token
+  5. 复制生成的 Token（这是你的专属 Central Token）
+  6. 将 Token 设置为 `SONATYPE_PASSWORD` 的值
+- ⚠️ **注意**：OSSRH 将于 2025-06-30 停止服务，必须使用 Central Publishing Portal
 
 **GPG_PRIVATE_KEY**
 - 名称: `GPG_PRIVATE_KEY`
@@ -142,6 +153,30 @@ gpg --export-secret-keys --armor YOUR_KEY_ID | base64 -w 0
 ```
 
 ### 3. 配置 Sonatype 账号
+
+#### ⚠️ 重要：迁移到 Central Publishing Portal
+
+**OSSRH 将于 2025-06-30 停止服务**，所有项目需要迁移到新的 Central Publishing Portal。
+
+**迁移步骤：**
+
+1. **注册 Central Publishing Portal 账户**
+   - 访问 https://central.sonatype.com/
+   - 使用 GitHub 账户登录（推荐）
+
+2. **注册命名空间**
+   - 登录后，在 Portal 中注册您的命名空间（如 `io.github.xichenx`）
+   - 如果通过 GitHub 登录，个人命名空间可能已自动注册
+
+3. **生成 User Token**
+   - 在 Portal 中：Profile → User Token
+   - 生成新的 User Token
+   - 将 Token 设置为 `SONATYPE_PASSWORD` 的值（而不是密码）
+
+4. **验证命名空间**
+   - 在 Portal 的命名空间页面确认命名空间已验证
+
+**旧方式（OSSRH，将在 2025-06-30 后停止）：**
 
 1. 访问 https://issues.sonatype.org
 2. 创建账号（如果还没有）
@@ -281,8 +316,11 @@ dependencies {
 - 确认 `GPG_PASSPHRASE` 正确
 - 检查密钥是否过期
 
-**问题**: Sonatype 发布失败
+**问题**: Sonatype 发布失败（401 错误）
 - 确认 `SONATYPE_USERNAME` 和 `SONATYPE_PASSWORD` 正确
+- ⚠️ **如果使用 Central Publishing Portal**：确保使用 User Token 而不是密码
+- 检查命名空间是否已在 Portal 中注册和验证
+- 参考：[Central Publishing Portal 迁移指南](https://central.sonatype.org/news/20250326_ossrh_sunset/)
 - 确认 GroupId 已申请并通过审核
 - 检查 POM 文件是否正确生成
 
