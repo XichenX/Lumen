@@ -43,29 +43,68 @@ if (!isJitPack && project.plugins.hasPlugin("com.vanniktech.maven.publish")) {
     // 我们不需要手动设置这些属性，插件会自动读取
     
     // 配置 GPG 签名（使用内存密钥）
-    // 插件可以从环境变量或系统属性读取 signingInMemoryKey、signingInMemoryKeyId、signingInMemoryKeyPassword
-    // 如果提供了密钥文件路径，我们读取文件内容并设置到系统属性
-    val signingKeyFile = System.getenv("SIGNING_SECRET_KEY_RING_FILE")
-        ?: project.findProperty("SIGNING_SECRET_KEY_RING_FILE") as String?
-    
-    if (signingKeyFile != null) {
-        try {
-            val keyFile = file(signingKeyFile)
-            if (keyFile.exists()) {
-                val keyContent = keyFile.readText().trim()
-                if (keyContent.isNotBlank()) {
-                    // 设置系统属性，插件会自动读取
-                    System.setProperty("signingInMemoryKey", keyContent)
-                    logger.info("✅ GPG key loaded from file: $signingKeyFile")
-                }
+    // 需要显式配置 Gradle 签名插件以使用内存中的 GPG 密钥
+    afterEvaluate {
+        // 读取 GPG 签名配置
+        val signingKeyFile = System.getenv("SIGNING_SECRET_KEY_RING_FILE")
+            ?: project.findProperty("SIGNING_SECRET_KEY_RING_FILE") as String?
+        val signingKeyId = System.getenv("signingInMemoryKeyId")
+            ?: System.getenv("SIGNING_KEY_ID")
+            ?: project.findProperty("signingInMemoryKeyId") as String?
+            ?: project.findProperty("SIGNING_KEY_ID") as String?
+        val signingPassword = System.getenv("signingInMemoryKeyPassword")
+            ?: System.getenv("SIGNING_PASSWORD")
+            ?: project.findProperty("signingInMemoryKeyPassword") as String?
+            ?: project.findProperty("SIGNING_PASSWORD") as String?
+        
+        // 如果提供了密钥文件路径，读取密钥内容
+        val signingKeyContent = if (signingKeyFile != null) {
+            try {
+                val keyFile = file(signingKeyFile)
+                if (keyFile.exists()) {
+                    val content = keyFile.readText().trim()
+                    if (content.isNotBlank()) {
+                        logger.info("✅ GPG key loaded from file: $signingKeyFile")
+                        content
+                    } else null
+                } else null
+            } catch (e: Exception) {
+                logger.warn("⚠️  Failed to read GPG key file: ${e.message}")
+                null
             }
-        } catch (e: Exception) {
-            logger.warn("⚠️  Failed to read GPG key file: ${e.message}")
+        } else {
+            // 或者从环境变量直接读取密钥内容
+            System.getenv("signingInMemoryKey")
+                ?: System.getenv("SIGNING_IN_MEMORY_KEY")
+                ?: project.findProperty("signingInMemoryKey") as String?
+                ?: project.findProperty("SIGNING_IN_MEMORY_KEY") as String?
+        }
+        
+        // 配置签名插件（如果所有必需的签名信息都可用）
+        if (signingKeyContent != null && signingKeyId != null && signingPassword != null) {
+            try {
+                // 应用签名插件（如果尚未应用）
+                if (!project.plugins.hasPlugin("signing")) {
+                    project.plugins.apply("signing")
+                }
+                
+                // 配置签名插件使用内存中的密钥
+                extensions.configure<org.gradle.plugins.signing.SigningExtension>("signing") {
+                    useInMemoryPgpKeys(signingKeyId, signingKeyContent, signingPassword)
+                }
+                
+                logger.info("✅ GPG signing configured for ${project.name}")
+            } catch (e: Exception) {
+                logger.warn("⚠️  Failed to configure GPG signing: ${e.message}")
+            }
+        } else {
+            val missing = mutableListOf<String>()
+            if (signingKeyContent == null) missing.add("signingInMemoryKey")
+            if (signingKeyId == null) missing.add("signingInMemoryKeyId")
+            if (signingPassword == null) missing.add("signingInMemoryKeyPassword")
+            logger.warn("⚠️  GPG signing not configured for ${project.name}, missing: ${missing.joinToString(", ")}")
         }
     }
-    
-    // 注意：signingInMemoryKeyId 和 signingInMemoryKeyPassword 应该通过环境变量传递
-    // 插件会自动从环境变量读取，无需手动设置
     
     // 配置 mavenPublishing（使用 afterEvaluate 确保插件已初始化）
     afterEvaluate {
