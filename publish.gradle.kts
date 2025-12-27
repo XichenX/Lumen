@@ -19,9 +19,17 @@
 // 统一版本号管理：确保 JitPack 和 Maven Central 使用相同的版本号
 // 优先使用 LIBRARY_VERSION_NAME（组件版本），如果没有则使用 VERSION_NAME
 // 这与 build.gradle.kts 中的版本管理保持一致
-val versionName: String = project.findProperty("LIBRARY_VERSION_NAME") as String?
-    ?: project.findProperty("VERSION_NAME") as String?
-    ?: "1.0.0"
+val versionName: String = run {
+    val libraryVersion = project.findProperty("LIBRARY_VERSION_NAME") as String?
+    val fallbackVersion = project.findProperty("VERSION_NAME") as String?
+    
+    // 如果 LIBRARY_VERSION_NAME 存在且不为空，使用它；否则使用 VERSION_NAME；最后回退到默认值
+    when {
+        !libraryVersion.isNullOrBlank() -> libraryVersion.trim()
+        !fallbackVersion.isNullOrBlank() -> fallbackVersion.trim()
+        else -> "1.0.0"
+    }
+}
 val isJitPack = System.getenv("JITPACK") == "true"
 
 // 根据发布方式选择不同的 groupId
@@ -34,6 +42,7 @@ val publishGroupId = if (isJitPack) {
 
 // 设置项目版本（JitPack 和 Maven Central 使用相同的版本号）
 version = versionName
+logger.info("📦 Publishing version: $versionName for ${project.name}")
 
 // 配置发布（仅在非 JitPack 时使用 Maven Central）
 if (!isJitPack && project.plugins.hasPlugin("com.vanniktech.maven.publish")) {
@@ -112,6 +121,14 @@ if (!isJitPack && project.plugins.hasPlugin("com.vanniktech.maven.publish")) {
         val mavenPublishing = extensions.findByName("mavenPublishing")
         if (mavenPublishing != null) {
             try {
+                // 验证版本号不为空
+                if (versionName.isBlank()) {
+                    logger.error("❌ Version name is empty for ${project.name}, cannot publish")
+                    return@afterEvaluate
+                }
+                
+                logger.info("🔧 Configuring mavenPublishing for ${project.name}: groupId=$publishGroupId, artifactId=${project.name}, version=$versionName")
+                
                 // 设置坐标
                 mavenPublishing.javaClass.getMethod(
                     "coordinates",
