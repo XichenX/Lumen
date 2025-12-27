@@ -319,15 +319,20 @@ jobs:
       - name: Publish to Maven Central
         id: publish
         env:
-          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
-          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
-          SIGNING_KEY_ID: ${{ env.GPG_KEY_ID }}
-          SIGNING_PASSWORD: ${{ secrets.GPG_PASSPHRASE }}
+          # com.vanniktech.maven.publish 插件期望的环境变量名称
+          # 插件会自动从这些环境变量读取凭证
+          mavenCentralUsername: ${{ secrets.SONATYPE_USERNAME }}
+          mavenCentralPassword: ${{ secrets.SONATYPE_PASSWORD }}
+          # GPG 签名配置（插件期望的环境变量名称）
+          signingInMemoryKeyId: ${{ env.GPG_KEY_ID }}
+          signingInMemoryKeyPassword: ${{ secrets.GPG_PASSPHRASE }}
+          # GPG 密钥文件路径（用于读取密钥内容）
           SIGNING_SECRET_KEY_RING_FILE: ${{ env.GPG_KEY_FILE || 'secret.gpg' }}
         run: |
           VERSION="${{ needs.build.outputs.version }}"
           
-          if [ -z "$SONATYPE_USERNAME" ] || [ -z "$SONATYPE_PASSWORD" ]; then
+          # 检查凭证是否配置（插件期望的环境变量名称）
+          if [ -z "$mavenCentralUsername" ] || [ -z "$mavenCentralPassword" ]; then
             echo "⚠️  Sonatype credentials not configured, skipping Maven Central publish"
             echo "publish_success=false" >> $GITHUB_OUTPUT
             exit 0

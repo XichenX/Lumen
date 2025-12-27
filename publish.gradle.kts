@@ -7,12 +7,13 @@
  * 使用方法：
  * 1. 在子模块的 build.gradle.kts 中应用插件：alias(libs.plugins.maven.publish)
  * 2. 应用此脚本：apply(from = rootProject.file("publish.gradle.kts"))
- * 3. 配置凭证（gradle.properties 或环境变量）：
- *    - mavenCentralUsername / SONATYPE_USERNAME
- *    - mavenCentralPassword / SONATYPE_PASSWORD
- *    - signingInMemoryKey / SIGNING_IN_MEMORY_KEY
- *    - signingInMemoryKeyId / SIGNING_KEY_ID (可选)
- *    - signingInMemoryKeyPassword / SIGNING_PASSWORD (可选)
+ * 3. 配置凭证（通过环境变量或 gradle.properties）：
+ *    - mavenCentralUsername: Sonatype 用户名（插件自动读取）
+ *    - mavenCentralPassword: Sonatype 密码（插件自动读取）
+ *    - signingInMemoryKey: GPG 密钥内容（插件自动读取）
+ *    - signingInMemoryKeyId: GPG 密钥 ID（插件自动读取）
+ *    - signingInMemoryKeyPassword: GPG 密钥密码（插件自动读取）
+ *    或者通过 SIGNING_SECRET_KEY_RING_FILE 指定密钥文件路径（脚本会自动读取并设置）
  */
 
 // 统一版本号管理：确保 JitPack 和 Maven Central 使用相同的版本号
@@ -36,46 +37,35 @@ version = versionName
 
 // 配置发布（仅在非 JitPack 时使用 Maven Central）
 if (!isJitPack && project.plugins.hasPlugin("com.vanniktech.maven.publish")) {
-    // 映射凭证到插件需要的属性名（为了兼容性）
-    val sonatypeUsername = project.findProperty("SONATYPE_USERNAME") as String?
-        ?: System.getenv("SONATYPE_USERNAME")
-    val sonatypePassword = project.findProperty("SONATYPE_PASSWORD") as String?
-        ?: System.getenv("SONATYPE_PASSWORD")
-    
-    if (sonatypeUsername != null && sonatypePassword != null) {
-        project.setProperty("mavenCentralUsername", sonatypeUsername.trim())
-        project.setProperty("mavenCentralPassword", sonatypePassword.trim())
-    }
+    // 注意：com.vanniktech.maven.publish 插件会自动从以下位置读取凭证：
+    // 1. gradle.properties 文件中的 mavenCentralUsername 和 mavenCentralPassword
+    // 2. 环境变量 mavenCentralUsername 和 mavenCentralPassword
+    // 我们不需要手动设置这些属性，插件会自动读取
     
     // 配置 GPG 签名（使用内存密钥）
-    val signingKey = project.findProperty("SIGNING_IN_MEMORY_KEY") as String?
-        ?: System.getenv("SIGNING_IN_MEMORY_KEY")
+    // 插件可以从环境变量或系统属性读取 signingInMemoryKey、signingInMemoryKeyId、signingInMemoryKeyPassword
+    // 如果提供了密钥文件路径，我们读取文件内容并设置到系统属性
+    val signingKeyFile = System.getenv("SIGNING_SECRET_KEY_RING_FILE")
         ?: project.findProperty("SIGNING_SECRET_KEY_RING_FILE") as String?
-        ?: System.getenv("SIGNING_SECRET_KEY_RING_FILE")
     
-    if (signingKey != null) {
-        val keyContent = if (file(signingKey).exists()) {
-            file(signingKey).readText().trim()
-        } else {
-            signingKey.trim()
-        }
-        
-        if (keyContent.isNotBlank()) {
-            project.setProperty("signingInMemoryKey", keyContent)
-            
-            val signingKeyId = project.findProperty("SIGNING_KEY_ID") as String?
-                ?: System.getenv("SIGNING_KEY_ID")
-            val signingPassword = project.findProperty("SIGNING_PASSWORD") as String?
-                ?: System.getenv("SIGNING_PASSWORD")
-            
-            if (signingKeyId != null) {
-                project.setProperty("signingInMemoryKeyId", signingKeyId.trim())
+    if (signingKeyFile != null) {
+        try {
+            val keyFile = file(signingKeyFile)
+            if (keyFile.exists()) {
+                val keyContent = keyFile.readText().trim()
+                if (keyContent.isNotBlank()) {
+                    // 设置系统属性，插件会自动读取
+                    System.setProperty("signingInMemoryKey", keyContent)
+                    logger.info("✅ GPG key loaded from file: $signingKeyFile")
+                }
             }
-            if (signingPassword != null) {
-                project.setProperty("signingInMemoryKeyPassword", signingPassword.trim())
-            }
+        } catch (e: Exception) {
+            logger.warn("⚠️  Failed to read GPG key file: ${e.message}")
         }
     }
+    
+    // 注意：signingInMemoryKeyId 和 signingInMemoryKeyPassword 应该通过环境变量传递
+    // 插件会自动从环境变量读取，无需手动设置
     
     // 配置 mavenPublishing（使用 afterEvaluate 确保插件已初始化）
     afterEvaluate {
