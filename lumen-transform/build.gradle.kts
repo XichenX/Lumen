@@ -36,14 +36,6 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
-    
-    // 配置发布
-    publishing {
-        singleVariant("release") {
-            withSourcesJar()
-            withJavadocJar()
-        }
-    }
 }
 
 dependencies {
