@@ -33,37 +33,22 @@ val versionName: String = run {
 val isJitPack = System.getenv("JITPACK") == "true"
 
 // 根据发布方式选择不同的 groupId
-val githubUser = project.findProperty("GITHUB_USER") as String? ?: "xichenx"
+// 确保 GitHub 用户名使用小写（JitPack 要求小写）
+val githubUser = (project.findProperty("GITHUB_USER") as String? ?: "xichenx").lowercase()
 val publishGroupId = if (isJitPack) {
     "com.github.$githubUser"
 } else {
     "io.github.$githubUser"
 }
 
-// 在 JitPack 模式下，尽早移除冲突的 publication
-// 这需要在配置阶段执行，在依赖解析之前
-if (isJitPack && project.plugins.hasPlugin("maven-publish")) {
-    // 使用 whenObjectAdded 来拦截 publication 的创建
-    project.extensions.configure<org.gradle.api.publish.PublishingExtension>("publishing") {
-        publications.whenObjectAdded { pub: org.gradle.api.publish.Publication ->
-            // 如果 publication 的坐标不匹配，立即移除它
-            if (pub is org.gradle.api.publish.maven.MavenPublication) {
-                val expectedArtifactId = project.name.lowercase()
-                if (pub.groupId != publishGroupId || pub.artifactId != expectedArtifactId) {
-                    logger.warn("⚠️  Removing conflicting publication: ${pub.name} (${pub.groupId}:${pub.artifactId}:${pub.version})")
-                    publications.remove(pub)
-                }
-            }
-        }
-    }
-}
-
 // 设置项目版本（JitPack 和 Maven Central 使用相同的版本号）
 version = versionName
 logger.info("📦 Publishing version: $versionName for ${project.name}")
 
-// 配置发布（仅在非 JitPack 时使用 Maven Central）
-if (!isJitPack && project.plugins.hasPlugin("com.vanniktech.maven.publish")) {
+
+// 配置发布：统一使用 com.vanniktech.maven.publish 插件
+// 在 JitPack 和 Maven Central 模式下都使用这个插件，只是配置不同的坐标
+if (project.plugins.hasPlugin("com.vanniktech.maven.publish")) {
     // 注意：com.vanniktech.maven.publish 插件会自动从以下位置读取凭证：
     // 1. gradle.properties 文件中的 mavenCentralUsername 和 mavenCentralPassword
     // 2. 环境变量 mavenCentralUsername 和 mavenCentralPassword
@@ -175,12 +160,15 @@ if (!isJitPack && project.plugins.hasPlugin("com.vanniktech.maven.publish")) {
                     String::class.java
                 ).invoke(mavenPublishing, publishGroupId, artifactId, versionName)
                 
-                // 配置 Maven Central
-                // 注意：这可能会在清理时产生警告，但不会影响实际的发布
-                // 原因：com.vanniktech.maven.publish 插件在构建服务清理时，
-                // 尝试访问 centralPortal 属性，但该属性在某些情况下可能未初始化
-                // 这不会影响实际的发布过程，因为发布已经在清理阶段之前完成
-                mavenPublishing.javaClass.getMethod("publishToMavenCentral").invoke(mavenPublishing)
+                // 仅在非 JitPack 模式下配置 Maven Central
+                if (!isJitPack) {
+                    // 配置 Maven Central
+                    // 注意：这可能会在清理时产生警告，但不会影响实际的发布
+                    // 原因：com.vanniktech.maven.publish 插件在构建服务清理时，
+                    // 尝试访问 centralPortal 属性，但该属性在某些情况下可能未初始化
+                    // 这不会影响实际的发布过程，因为发布已经在清理阶段之前完成
+                    mavenPublishing.javaClass.getMethod("publishToMavenCentral").invoke(mavenPublishing)
+                }
                 
                 // 启用签名
                 mavenPublishing.javaClass.getMethod("signAllPublications").invoke(mavenPublishing)
@@ -191,47 +179,7 @@ if (!isJitPack && project.plugins.hasPlugin("com.vanniktech.maven.publish")) {
             }
         }
     }
-} else if (isJitPack) {
-    // JitPack 模式：使用标准的 maven-publish
-    // 注意：版本号与 Maven Central 保持一致（使用相同的 versionName）
-    
-    if (!project.plugins.hasPlugin("maven-publish")) {
-        project.plugins.apply("maven-publish")
-    }
-    
-    // 在配置阶段就拦截并移除冲突的 publication
-    // 使用 whenObjectAdded 来在 publication 创建时立即处理
-    project.afterEvaluate {
-        // artifactId 统一使用小写
-        val artifactIdValue = project.name.lowercase()
-        
-        extensions.configure<org.gradle.api.publish.PublishingExtension>("publishing") {
-            // 移除所有现有的 publication（包括 com.vanniktech.maven.publish 自动创建的）
-            // 必须在创建新 publication 之前移除，避免依赖解析时的冲突
-            val existingPubs = publications.toList()
-            existingPubs.forEach { pub ->
-                val pubInfo = if (pub is org.gradle.api.publish.maven.MavenPublication) {
-                    "${pub.groupId}:${pub.artifactId}:${pub.version}"
-                } else {
-                    pub.name
-                }
-                publications.remove(pub)
-                logger.info("🗑️  Removed existing publication: ${pub.name} ($pubInfo)")
-            }
-            
-            // 创建我们自己的 release publication，使用正确的坐标
-            publications.create<org.gradle.api.publish.maven.MavenPublication>("release") {
-                from(components["release"])
-                groupId = publishGroupId
-                artifactId = artifactIdValue
-                version = versionName
-            }
-            
-            logger.info("📦 Created JitPack publication: $publishGroupId:$artifactIdValue:$versionName")
-        }
-        logger.lifecycle("✅ JitPack 发布配置完成: ${project.name} (groupId=$publishGroupId, artifactId=$artifactIdValue, version=$versionName)")
-    }
 } else {
-    // 非 JitPack 但插件未应用，只记录警告
-    logger.warn("⚠️  com.vanniktech.maven.publish plugin not applied to ${project.name}, skipping Maven Central configuration")
+    // 插件未应用，只记录警告
+    logger.warn("⚠️  com.vanniktech.maven.publish plugin not applied to ${project.name}, skipping publish configuration")
 }
