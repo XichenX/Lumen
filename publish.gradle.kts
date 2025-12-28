@@ -51,7 +51,22 @@ logger.info("📦 Publishing version: $versionName for ${project.name}")
 
 // 配置发布：统一使用 com.vanniktech.maven.publish 插件
 // 在 JitPack 和 Maven Central 模式下都使用这个插件，只是配置不同的坐标
-if (project.plugins.hasPlugin("com.vanniktech.maven.publish")) {
+
+// 只发布根聚合模块（lumen），子模块不发布
+// 这样可以避免多模块路径识别错误，确保使用正确的坐标格式
+if (project.name != "lumen") {
+    // 子模块不发布（无论是 JitPack 还是 Maven Central）
+    afterEvaluate {
+        if (project.plugins.hasPlugin("com.vanniktech.maven.publish")) {
+            logger.info("ℹ️  Skipping publishing for submodule ${project.name} (only root module 'lumen' is published)")
+            // 禁用子模块的发布任务
+            tasks.matching { it.name.startsWith("publish") }.configureEach {
+                enabled = false
+            }
+        }
+    }
+} else if (project.plugins.hasPlugin("com.vanniktech.maven.publish")) {
+    // 根模块（lumen）：正常配置发布
     // 注意：com.vanniktech.maven.publish 插件会自动从以下位置读取凭证：
     // 1. gradle.properties 文件中的 mavenCentralUsername 和 mavenCentralPassword
     // 2. 环境变量 mavenCentralUsername 和 mavenCentralPassword
@@ -165,15 +180,15 @@ if (project.plugins.hasPlugin("com.vanniktech.maven.publish")) {
                 
                 // 仅在非 JitPack 模式下配置 Maven Central 和签名
                 if (!isJitPack) {
-                    // 配置 Maven Central
-                    // 注意：这可能会在清理时产生警告，但不会影响实际的发布
-                    // 原因：com.vanniktech.maven.publish 插件在构建服务清理时，
-                    // 尝试访问 centralPortal 属性，但该属性在某些情况下可能未初始化
-                    // 这不会影响实际的发布过程，因为发布已经在清理阶段之前完成
-                    mavenPublishing.javaClass.getMethod("publishToMavenCentral").invoke(mavenPublishing)
-                    
+                // 配置 Maven Central
+                // 注意：这可能会在清理时产生警告，但不会影响实际的发布
+                // 原因：com.vanniktech.maven.publish 插件在构建服务清理时，
+                // 尝试访问 centralPortal 属性，但该属性在某些情况下可能未初始化
+                // 这不会影响实际的发布过程，因为发布已经在清理阶段之前完成
+                mavenPublishing.javaClass.getMethod("publishToMavenCentral").invoke(mavenPublishing)
+                
                     // 启用签名（仅 Maven Central 需要签名）
-                    mavenPublishing.javaClass.getMethod("signAllPublications").invoke(mavenPublishing)
+                mavenPublishing.javaClass.getMethod("signAllPublications").invoke(mavenPublishing)
                     
                     logger.info("✅ Maven Central publishing and signing configured for ${project.name}")
                 } else {
