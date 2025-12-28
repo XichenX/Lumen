@@ -162,12 +162,12 @@ if (project.plugins.hasPlugin("com.vanniktech.maven.publish")) {
                 
                 // 仅在非 JitPack 模式下配置 Maven Central
                 if (!isJitPack) {
-                    // 配置 Maven Central
-                    // 注意：这可能会在清理时产生警告，但不会影响实际的发布
-                    // 原因：com.vanniktech.maven.publish 插件在构建服务清理时，
-                    // 尝试访问 centralPortal 属性，但该属性在某些情况下可能未初始化
-                    // 这不会影响实际的发布过程，因为发布已经在清理阶段之前完成
-                    mavenPublishing.javaClass.getMethod("publishToMavenCentral").invoke(mavenPublishing)
+                // 配置 Maven Central
+                // 注意：这可能会在清理时产生警告，但不会影响实际的发布
+                // 原因：com.vanniktech.maven.publish 插件在构建服务清理时，
+                // 尝试访问 centralPortal 属性，但该属性在某些情况下可能未初始化
+                // 这不会影响实际的发布过程，因为发布已经在清理阶段之前完成
+                mavenPublishing.javaClass.getMethod("publishToMavenCentral").invoke(mavenPublishing)
                 }
                 
                 // 启用签名

@@ -489,6 +489,16 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           
+          # 更新 gradle.properties 中的版本号
+          echo "📝 Updating version in gradle.properties to $VERSION"
+          if grep -q "^LIBRARY_VERSION_NAME=" gradle.properties; then
+            sed -i "s/^LIBRARY_VERSION_NAME=.*/LIBRARY_VERSION_NAME=$VERSION/" gradle.properties
+          else
+            echo "LIBRARY_VERSION_NAME=$VERSION" >> gradle.properties
+          fi
+          sed -i "s/^VERSION_NAME=.*/VERSION_NAME=$VERSION/" gradle.properties
+          
+          # 检查是否有变更
           if ! git diff --quiet gradle.properties; then
             echo "📝 Committing version update to repository"
             git add gradle.properties
@@ -496,6 +506,9 @@ jobs:
             
             BRANCH=$(git rev-parse --abbrev-ref HEAD)
             git push origin HEAD:$BRANCH || echo "⚠️  Failed to push version update"
+            echo "✅ Version $VERSION has been committed and pushed to $BRANCH"
+          else
+            echo "ℹ️  No changes to commit (version already up to date)"
           fi
       
       - name: Create GitHub Release
