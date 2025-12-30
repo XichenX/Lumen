@@ -155,14 +155,9 @@ dependencies {
     // BOM for version management
     implementation(platform("io.github.xichenx:lumen-bom:1.0.0"))
     
-    // Core module (required)
-    implementation("io.github.xichenx:lumen-core")
-    
     // View module for XML/View projects
+    // Automatically includes: lumen-core, lumen-transform
     implementation("io.github.xichenx:lumen-view")
-    
-    // Transform module (optional, for image transformations)
-    implementation("io.github.xichenx:lumen-transform")
 }
 ```
 
@@ -177,20 +172,16 @@ dependencies {
     // BOM for version management
     implementation(platform("io.github.xichenx:lumen-bom:1.0.0"))
     
-    // Core module (required)
-    implementation("io.github.xichenx:lumen-core")
-    
     // Compose module for Jetpack Compose projects
+    // Automatically includes: lumen-core, lumen-view, lumen-transform
     implementation("io.github.xichenx:lumen-compose")
-    
-    // Transform module (optional, for image transformations)
-    implementation("io.github.xichenx:lumen-transform")
 }
 ```
 
 > **Note:** 
 > - The BOM ensures all modules use compatible versions
-> - You must **explicitly choose** either `lumen-view` (XML) or `lumen-compose` (Compose)
+> - You only need to choose **one** module: `lumen-view` (XML) or `lumen-compose` (Compose)
+> - All required dependencies (`lumen-core`, `lumen-transform`) are automatically included
 
 ### 2. Add Permissions
 

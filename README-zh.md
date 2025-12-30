@@ -154,14 +154,9 @@ dependencies {
     // BOM 用于版本管理
     implementation(platform("io.github.xichenx:lumen-bom:1.0.0"))
     
-    // 核心模块（必需）
-    implementation("io.github.xichenx:lumen-core")
-    
     // View 模块，用于 XML/View 项目
+    // 自动包含：lumen-core, lumen-transform
     implementation("io.github.xichenx:lumen-view")
-    
-    // Transform 模块（可选，用于图片转换）
-    implementation("io.github.xichenx:lumen-transform")
 }
 ```
 
@@ -176,20 +171,16 @@ dependencies {
     // BOM 用于版本管理
     implementation(platform("io.github.xichenx:lumen-bom:1.0.0"))
     
-    // 核心模块（必需）
-    implementation("io.github.xichenx:lumen-core")
-    
     // Compose 模块，用于 Jetpack Compose 项目
+    // 自动包含：lumen-core, lumen-view, lumen-transform
     implementation("io.github.xichenx:lumen-compose")
-    
-    // Transform 模块（可选，用于图片转换）
-    implementation("io.github.xichenx:lumen-transform")
 }
 ```
 
 > **注意：** 
 > - BOM 确保所有模块使用兼容的版本
-> - 你必须**显式选择** `lumen-view`（XML）或 `lumen-compose`（Compose）
+> - 你只需要选择**一个**模块：`lumen-view`（XML）或 `lumen-compose`（Compose）
+> - 所有必需的依赖（`lumen-core`、`lumen-transform`）会自动包含
 
 ### 2. 添加权限
 
