@@ -1,12 +1,13 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.compose.compiler)
     alias(libs.plugins.maven.publish)
 }
 
-// 版本配置：优先级 LUMEN_CORE_VERSION > LIBRARY_VERSION_NAME > VERSION_NAME > 默认值
+// 版本配置：优先级 LUMEN_COMPOSE_VERSION > LIBRARY_VERSION_NAME > VERSION_NAME > 默认值
 val publishVersion: String = run {
-    val moduleVersion = project.findProperty("LUMEN_CORE_VERSION") as String?
+    val moduleVersion = project.findProperty("LUMEN_COMPOSE_VERSION") as String?
     val libraryVersion = project.findProperty("LIBRARY_VERSION_NAME") as String?
     val versionName = project.findProperty("VERSION_NAME") as String?
     
@@ -19,17 +20,17 @@ val publishVersion: String = run {
 }
 
 version = publishVersion
-logger.info("📦 Publishing lumen-core version: $publishVersion")
+logger.info("📦 Publishing lumen-compose version: $publishVersion")
 
 // Maven 发布配置
 mavenPublishing {
     publishToMavenCentral(automaticRelease = true)
     signAllPublications()
 
-    coordinates("io.github.xichenx", "lumen-core", publishVersion)
+    coordinates("io.github.xichenx", "lumen-compose", publishVersion)
     pom {
-        name.set("Lumen Core")
-        description.set("Core loading logic for Lumen - A Kotlin-first Android image loading library")
+        name.set("Lumen Compose")
+        description.set("Jetpack Compose integration for Lumen - A Kotlin-first Android image loading library")
         inceptionYear.set("2025")
         url.set("https://github.com/xichenx/lumen/")
         licenses {
@@ -55,7 +56,7 @@ mavenPublishing {
 }
 
 android {
-    namespace = "com.xichen.lumen.core"
+    namespace = "com.xichen.lumen.compose"
     compileSdk {
         version = release(36)
     }
@@ -83,12 +84,39 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+    buildFeatures {
+        compose = true
+    }
+    composeOptions {
+        kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
+    }
 }
 
 dependencies {
+    // Core module
+    implementation(project(":lumen-core"))
+    
+    // View module (for RequestBuilder)
+    implementation(project(":lumen-view"))
+    
+    // AndroidX
     implementation(libs.androidx.core.ktx)
+    
+    // Compose
+    implementation(platform(libs.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.runtime)
+    
+    // Coroutines
     implementation(libs.kotlinx.coroutines.android)
+    
+    // Test
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    debugImplementation(libs.androidx.compose.ui.tooling)
 }

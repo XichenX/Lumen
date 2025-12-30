@@ -4,6 +4,55 @@ plugins {
     alias(libs.plugins.maven.publish)
 }
 
+// 版本配置：优先级 LUMEN_TRANSFORM_VERSION > LIBRARY_VERSION_NAME > VERSION_NAME > 默认值
+val publishVersion: String = run {
+    val moduleVersion = project.findProperty("LUMEN_TRANSFORM_VERSION") as String?
+    val libraryVersion = project.findProperty("LIBRARY_VERSION_NAME") as String?
+    val versionName = project.findProperty("VERSION_NAME") as String?
+    
+    when {
+        !moduleVersion.isNullOrBlank() -> moduleVersion.trim()
+        !libraryVersion.isNullOrBlank() -> libraryVersion.trim()
+        !versionName.isNullOrBlank() -> versionName.trim()
+        else -> "1.0.0"
+    }
+}
+
+version = publishVersion
+logger.info("📦 Publishing lumen-transform version: $publishVersion")
+
+// Maven 发布配置
+mavenPublishing {
+    publishToMavenCentral(automaticRelease = true)
+    signAllPublications()
+
+    coordinates("io.github.xichenx", "lumen-transform", publishVersion)
+    pom {
+        name.set("Lumen Transform")
+        description.set("Image transformation utilities for Lumen - A Kotlin-first Android image loading library")
+        inceptionYear.set("2025")
+        url.set("https://github.com/xichenx/lumen/")
+        licenses {
+            license {
+                name.set("The Apache License, Version 2.0")
+                url.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
+                distribution.set("repo")
+            }
+        }
+        developers {
+            developer {
+                id.set("xichen")
+                name.set("刘明智")
+                url.set("https://github.com/xichenx/")
+            }
+        }
+        scm {
+            url.set("https://github.com/xichenx/lumen/")
+            connection.set("scm:git:git://github.com/xichenx/lumen.git")
+            developerConnection.set("scm:git:ssh://git@github.com:xichenx/lumen.git")
+        }
+    }
+}
 
 android {
     namespace = "com.xichen.lumen.transform"

@@ -1,0 +1,333 @@
+name: Publish lumen-bom (Integrated)
+
+on:
+  workflow_dispatch:
+    inputs:
+      bom_version:
+        description: 'BOM version to publish (e.g., 1.0.0). Leave empty for auto-increment'
+        required: false
+      core_version:
+        description: 'lumen-core version (leave empty to use BOM version)'
+        required: false
+      transform_version:
+        description: 'lumen-transform version (leave empty to use BOM version)'
+        required: false
+      view_version:
+        description: 'lumen-view version (leave empty to use BOM version)'
+        required: false
+      compose_version:
+        description: 'lumen-compose version (leave empty to use BOM version)'
+        required: false
+      auto_increment:
+        description: 'Auto increment BOM patch version'
+        type: boolean
+        default: true
+      publish_to:
+        description: 'Where to publish'
+        type: choice
+        required: true
+        default: 'maven-central'
+        options:
+          - maven-central
+
+concurrency:
+  group: publish-lumen-bom-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  pre-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      bom_version: ${{ steps.final_version.outputs.bom_version }}
+      core_version: ${{ steps.final_version.outputs.core_version }}
+      transform_version: ${{ steps.final_version.outputs.transform_version }}
+      view_version: ${{ steps.final_version.outputs.view_version }}
+      compose_version: ${{ steps.final_version.outputs.compose_version }}
+      should_publish: ${{ steps.check_version.outputs.should_publish }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Get current versions and branch
+        id: version_info
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          CURRENT_BOM=$(grep "^VERSION_NAME=" gradle.properties 2>/dev/null | cut -d'=' -f2 || echo "")
+          CURRENT_CORE=$(grep "^LUMEN_CORE_VERSION=" gradle.properties 2>/dev/null | cut -d'=' -f2 || echo "")
+          CURRENT_TRANSFORM=$(grep "^LUMEN_TRANSFORM_VERSION=" gradle.properties 2>/dev/null | cut -d'=' -f2 || echo "")
+          CURRENT_VIEW=$(grep "^LUMEN_VIEW_VERSION=" gradle.properties 2>/dev/null | cut -d'=' -f2 || echo "")
+          CURRENT_COMPOSE=$(grep "^LUMEN_COMPOSE_VERSION=" gradle.properties 2>/dev/null | cut -d'=' -f2 || echo "")
+          
+          # 根据分支确定默认版本
+          if [ "$BRANCH_NAME" == "main" ] || [ "$BRANCH_NAME" == "master" ]; then
+            DEFAULT_VERSION="0.0.1"
+          elif [[ "$BRANCH_NAME" == v* ]] || [ "$BRANCH_NAME" == "develop" ]; then
+            DEFAULT_VERSION="1.0.0"
+          else
+            DEFAULT_VERSION="1.0.0"
+          fi
+          
+          echo "current_bom=$CURRENT_BOM" >> $GITHUB_OUTPUT
+          echo "current_core=$CURRENT_CORE" >> $GITHUB_OUTPUT
+          echo "current_transform=$CURRENT_TRANSFORM" >> $GITHUB_OUTPUT
+          echo "current_view=$CURRENT_VIEW" >> $GITHUB_OUTPUT
+          echo "current_compose=$CURRENT_COMPOSE" >> $GITHUB_OUTPUT
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "default_version=$DEFAULT_VERSION" >> $GITHUB_OUTPUT
+          
+          echo "Current BOM version: $CURRENT_BOM"
+          echo "Current branch: $BRANCH_NAME"
+          echo "Default version for branch: $DEFAULT_VERSION"
+          echo "Current module versions: core=$CURRENT_CORE, transform=$CURRENT_TRANSFORM, view=$CURRENT_VIEW, compose=$CURRENT_COMPOSE"
+      
+      - name: Determine final versions
+        id: final_version
+        run: |
+          CURRENT_BOM="${{ steps.version_info.outputs.current_bom }}"
+          BRANCH_NAME="${{ steps.version_info.outputs.branch_name }}"
+          DEFAULT_VERSION="${{ steps.version_info.outputs.default_version }}"
+          
+          # 确定 BOM 基础版本
+          if [ "$BRANCH_NAME" == "main" ] || [ "$BRANCH_NAME" == "master" ]; then
+            # main分支：如果当前版本为空，从0.0.1开始；否则使用当前版本
+            if [ -z "$CURRENT_BOM" ] || [ "$CURRENT_BOM" == "" ]; then
+              BASE_BOM="0.0.1"
+            else
+              BASE_BOM="$CURRENT_BOM"
+            fi
+          elif [[ "$BRANCH_NAME" == v* ]] || [ "$BRANCH_NAME" == "develop" ]; then
+            # 开发分支：如果当前版本为空，从1.0.0开始；否则使用当前版本
+            if [ -z "$CURRENT_BOM" ] || [ "$CURRENT_BOM" == "" ]; then
+              BASE_BOM="1.0.0"
+            else
+              BASE_BOM="$CURRENT_BOM"
+            fi
+          else
+            # 其他分支：使用当前版本或默认值
+            BASE_BOM=${CURRENT_BOM:-"$DEFAULT_VERSION"}
+          fi
+          
+          # Determine BOM version
+          if [ -n "${{ github.event.inputs.bom_version }}" ]; then
+            FINAL_BOM="${{ github.event.inputs.bom_version }}"
+            echo "✅ Using manually specified BOM version: $FINAL_BOM"
+          elif [ "${{ github.event.inputs.auto_increment }}" == "true" ]; then
+            FINAL_BOM=$(echo "$BASE_BOM" | awk -F. '{printf "%d.%d.%d", $1, $2, $3+1}')
+            echo "✅ Auto increment BOM version: $BASE_BOM -> $FINAL_BOM (branch: $BRANCH_NAME)"
+          else
+            FINAL_BOM="$BASE_BOM"
+            echo "✅ Using current BOM version: $FINAL_BOM"
+          fi
+          
+          # Determine module versions (use input or fallback to BOM version)
+          FINAL_CORE="${{ github.event.inputs.core_version }}"
+          if [ -z "$FINAL_CORE" ]; then
+            FINAL_CORE="$FINAL_BOM"
+          fi
+          
+          FINAL_TRANSFORM="${{ github.event.inputs.transform_version }}"
+          if [ -z "$FINAL_TRANSFORM" ]; then
+            FINAL_TRANSFORM="$FINAL_BOM"
+          fi
+          
+          FINAL_VIEW="${{ github.event.inputs.view_version }}"
+          if [ -z "$FINAL_VIEW" ]; then
+            FINAL_VIEW="$FINAL_BOM"
+          fi
+          
+          FINAL_COMPOSE="${{ github.event.inputs.compose_version }}"
+          if [ -z "$FINAL_COMPOSE" ]; then
+            FINAL_COMPOSE="$FINAL_BOM"
+          fi
+          
+          echo "bom_version=$FINAL_BOM" >> $GITHUB_OUTPUT
+          echo "core_version=$FINAL_CORE" >> $GITHUB_OUTPUT
+          echo "transform_version=$FINAL_TRANSFORM" >> $GITHUB_OUTPUT
+          echo "view_version=$FINAL_VIEW" >> $GITHUB_OUTPUT
+          echo "compose_version=$FINAL_COMPOSE" >> $GITHUB_OUTPUT
+          
+          echo "📦 Final versions:"
+          echo "  BOM: $FINAL_BOM"
+          echo "  core: $FINAL_CORE"
+          echo "  transform: $FINAL_TRANSFORM"
+          echo "  view: $FINAL_VIEW"
+          echo "  compose: $FINAL_COMPOSE"
+      
+      - name: Check if versions are ready
+        id: check_version
+        run: |
+          echo "should_publish=true" >> $GITHUB_OUTPUT
+          echo "✅ All versions are ready to publish"
+
+  build:
+    runs-on: ubuntu-latest
+    needs: pre-check
+    if: needs.pre-check.outputs.should_publish == 'true'
+    permissions:
+      contents: read
+    outputs:
+      bom_version: ${{ needs.pre-check.outputs.bom_version }}
+      core_version: ${{ needs.pre-check.outputs.core_version }}
+      transform_version: ${{ needs.pre-check.outputs.transform_version }}
+      view_version: ${{ needs.pre-check.outputs.view_version }}
+      compose_version: ${{ needs.pre-check.outputs.compose_version }}
+      build_success: ${{ steps.build.outputs.build_success }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          cache-read-only: false
+      
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      
+      - name: Build all modules
+        id: build
+        run: |
+          BOM_VERSION="${{ needs.pre-check.outputs.bom_version }}"
+          CORE_VERSION="${{ needs.pre-check.outputs.core_version }}"
+          TRANSFORM_VERSION="${{ needs.pre-check.outputs.transform_version }}"
+          VIEW_VERSION="${{ needs.pre-check.outputs.view_version }}"
+          COMPOSE_VERSION="${{ needs.pre-check.outputs.compose_version }}"
+          
+          echo "🔨 Building all modules with versions:"
+          echo "  BOM: $BOM_VERSION"
+          echo "  core: $CORE_VERSION"
+          echo "  transform: $TRANSFORM_VERSION"
+          echo "  view: $VIEW_VERSION"
+          echo "  compose: $COMPOSE_VERSION"
+          
+          ./gradlew clean build test \
+            -PVERSION_NAME=$BOM_VERSION \
+            -PLUMEN_CORE_VERSION=$CORE_VERSION \
+            -PLUMEN_TRANSFORM_VERSION=$TRANSFORM_VERSION \
+            -PLUMEN_VIEW_VERSION=$VIEW_VERSION \
+            -PLUMEN_COMPOSE_VERSION=$COMPOSE_VERSION \
+            --parallel \
+            --max-workers=4 \
+            --stacktrace \
+            --no-daemon \
+            --console=plain
+          
+          if [ $? -eq 0 ]; then
+            echo "build_success=true" >> $GITHUB_OUTPUT
+            echo "✅ Build and test completed successfully"
+          else
+            echo "build_success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+  publish-maven-central:
+    runs-on: ubuntu-latest
+    needs: [pre-check, build]
+    if: |
+      needs.pre-check.outputs.should_publish == 'true' &&
+      needs.build.outputs.build_success == 'true' &&
+      (github.event.inputs.publish_to == 'maven-central' || github.event.inputs.publish_to == 'both')
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          cache-read-only: false
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Publish all modules to Maven Central
+        run: |
+          BOM_VERSION="${{ needs.pre-check.outputs.bom_version }}"
+          CORE_VERSION="${{ needs.pre-check.outputs.core_version }}"
+          TRANSFORM_VERSION="${{ needs.pre-check.outputs.transform_version }}"
+          VIEW_VERSION="${{ needs.pre-check.outputs.view_version }}"
+          COMPOSE_VERSION="${{ needs.pre-check.outputs.compose_version }}"
+          
+          echo "📦 Publishing all modules to Maven Central"
+          echo "  BOM: $BOM_VERSION"
+          echo "  core: $CORE_VERSION"
+          echo "  transform: $TRANSFORM_VERSION"
+          echo "  view: $VIEW_VERSION"
+          echo "  compose: $COMPOSE_VERSION"
+          
+          ./gradlew publishAllToMavenCentral \
+            -PVERSION_NAME=$BOM_VERSION \
+            -PLUMEN_CORE_VERSION=$CORE_VERSION \
+            -PLUMEN_TRANSFORM_VERSION=$TRANSFORM_VERSION \
+            -PLUMEN_VIEW_VERSION=$VIEW_VERSION \
+            -PLUMEN_COMPOSE_VERSION=$COMPOSE_VERSION \
+            --stacktrace \
+            --no-daemon \
+            --console=plain
+          
+          echo "✅ Published all modules to Maven Central"
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: [pre-check, build, publish-maven-central]
+    if: always()
+    steps:
+      - name: Publish summary
+        run: |
+          BOM_VERSION="${{ needs.pre-check.outputs.bom_version }}"
+          CORE_VERSION="${{ needs.pre-check.outputs.core_version }}"
+          TRANSFORM_VERSION="${{ needs.pre-check.outputs.transform_version }}"
+          VIEW_VERSION="${{ needs.pre-check.outputs.view_version }}"
+          COMPOSE_VERSION="${{ needs.pre-check.outputs.compose_version }}"
+          
+          echo "## 📦 lumen-bom (Integrated) Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**BOM Version:** $BOM_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Module Versions" >> $GITHUB_STEP_SUMMARY
+          echo "- lumen-core: $CORE_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- lumen-transform: $TRANSFORM_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- lumen-view: $VIEW_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- lumen-compose: $COMPOSE_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Published Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Maven Central BOM: \`io.github.xichenx:lumen-bom:$BOM_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Usage" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`kotlin" >> $GITHUB_STEP_SUMMARY
+          echo "// Maven Central (BOM)" >> $GITHUB_STEP_SUMMARY
+          echo "implementation(platform(\"io.github.xichenx:lumen-bom:$BOM_VERSION\"))" >> $GITHUB_STEP_SUMMARY
+          echo "implementation(\"io.github.xichenx:lumen-core\")" >> $GITHUB_STEP_SUMMARY
+          echo "implementation(\"io.github.xichenx:lumen-view\")" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+

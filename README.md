@@ -10,7 +10,6 @@
 ![Android](https://img.shields.io/badge/Android-API%2024+-green?style=flat&logo=android)
 ![License](https://img.shields.io/badge/License-Apache%202.0-yellow?style=flat)
 ![Maven Central](https://img.shields.io/maven-central/v/io.github.xichenx/lumen?label=Maven%20Central&style=flat)
-![JitPack](https://img.shields.io/jitpack/v/github/xichenx/lumen?label=JitPack&style=flat)
 
 **A Kotlin-first Android image loading library for business-friendly, AI scenarios, and list scenarios**
 
@@ -141,6 +140,10 @@ While there are excellent image loading libraries like Glide and Coil in the And
 
 ### 1. Add Dependencies
 
+Lumen uses a **BOM (Bill of Materials)** for version management, allowing you to choose the UI module you need.
+
+#### For XML/View Projects
+
 **Maven Central (Recommended):**
 
 ```kotlin
@@ -149,25 +152,45 @@ repositories {
 }
 
 dependencies {
-    implementation("io.github.xichenx:lumen:0.0.1")
+    // BOM for version management
+    implementation(platform("io.github.xichenx:lumen-bom:1.0.0"))
+    
+    // Core module (required)
+    implementation("io.github.xichenx:lumen-core")
+    
+    // View module for XML/View projects
+    implementation("io.github.xichenx:lumen-view")
+    
+    // Transform module (optional, for image transformations)
+    implementation("io.github.xichenx:lumen-transform")
 }
 ```
 
-**JitPack (Alternative):**
+#### For Compose Projects
 
 ```kotlin
 repositories {
-    maven { url = uri("https://jitpack.io") }
+    mavenCentral()
 }
 
 dependencies {
-    implementation("com.github.xichenx:lumen:0.0.1")
+    // BOM for version management
+    implementation(platform("io.github.xichenx:lumen-bom:1.0.0"))
+    
+    // Core module (required)
+    implementation("io.github.xichenx:lumen-core")
+    
+    // Compose module for Jetpack Compose projects
+    implementation("io.github.xichenx:lumen-compose")
+    
+    // Transform module (optional, for image transformations)
+    implementation("io.github.xichenx:lumen-transform")
 }
 ```
 
-> **Note:** Both Maven Central and JitPack use the same version numbers, so you can switch between them seamlessly. The only difference is the `groupId`:
-> - Maven Central: `io.github.xichenx:lumen:0.0.1`
-> - JitPack: `com.github.xichenx:lumen:0.0.1`
+> **Note:** 
+> - The BOM ensures all modules use compatible versions
+> - You must **explicitly choose** either `lumen-view` (XML) or `lumen-compose` (Compose)
 
 ### 2. Add Permissions
 
@@ -384,8 +407,18 @@ Lumen.with(context)
 
 ### Jetpack Compose
 
+**Note:** For Compose support, use the `lumen-compose` module with BOM:
+
 ```kotlin
-import com.xichen.lumen.view.compose.LumenImage
+dependencies {
+    implementation(platform("io.github.xichenx:lumen-bom:1.0.0"))
+    implementation("io.github.xichenx:lumen-core")
+    implementation("io.github.xichenx:lumen-compose")
+}
+```
+
+```kotlin
+import com.xichen.lumen.compose.LumenImage
 
 @Composable
 fun ImageScreen() {
@@ -820,36 +853,31 @@ Special thanks to the Glide and Coil projects for their tremendous contributions
 
 ## 📦 Publishing & Distribution
 
-Lumen is published to both **Maven Central** and **JitPack** with **guaranteed version consistency**.
+Lumen is published to **Maven Central**.
 
-### Version Consistency
-
-Both repositories use **exactly the same version numbers**, allowing seamless switching:
+### Publishing
 
 | Repository | Group ID | Artifact ID | Version | Status |
 |------------|----------|-------------|---------|--------|
 | Maven Central | `io.github.xichenx` | `lumen` | `0.0.1` | ✅ Official |
-| JitPack | `com.github.xichenx` | `lumen` | `0.0.1` | ✅ Alternative |
 
 **Example:**
 ```kotlin
 // Both use version 0.0.1 - completely interchangeable!
 implementation("io.github.xichenx:lumen:0.0.1")        // Maven Central
-implementation("com.github.xichenx:lumen:0.0.1")       // JitPack
 ```
 
-### Optimized Publishing Workflow
+### Publishing Workflow
 
-We use a **unified GitHub Actions workflow** that optimizes the publishing process:
+We use **GitHub Actions workflows** for automated publishing:
 
-- ✅ **Single Build**: Builds once, reuses artifacts for both platforms
-- ✅ **Parallel Publishing**: Publishes to Maven Central and JitPack simultaneously
-- ✅ **Version Sync**: Automatically ensures version consistency
-- ✅ **Time Savings**: Reduces total publishing time by ~33% through parallel execution
+- ✅ **Automated Publishing**: Automated publishing to Maven Central
+- ✅ **Version Management**: Independent versioning for each module
+- ✅ **BOM Support**: BOM for version coordination
 
 **Workflow Structure:**
 ```
-Pre-check → Build (once) → [Maven Central + JitPack] (parallel) → Finalize
+Pre-check → Build → Maven Central → Finalize
 ```
 
 For detailed publishing instructions, see [PUBLISH.md](PUBLISH.md).

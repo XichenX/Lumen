@@ -13,6 +13,7 @@ tasks.register("publishAllToMavenCentral") {
         ":lumen-core:publishToMavenCentral",
         ":lumen-transform:publishToMavenCentral",
         ":lumen-view:publishToMavenCentral",
+        ":lumen-compose:publishToMavenCentral",
         ":lumen:publishToMavenCentral"
     )
     
@@ -34,6 +35,7 @@ tasks.register("publishAllToMavenLocal") {
         ":lumen-core:publishToMavenLocal",
         ":lumen-transform:publishToMavenLocal",
         ":lumen-view:publishToMavenLocal",
+        ":lumen-compose:publishToMavenLocal",
         ":lumen:publishToMavenLocal"
     )
     

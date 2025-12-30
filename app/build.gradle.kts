@@ -201,13 +201,11 @@ afterEvaluate {
 }
 
 dependencies {
-    // Lumen - 聚合模块（包含所有子模块）
-    implementation(project(":lumen"))
-    
-    // 或者单独使用子模块（可选）
-    // implementation(project(":lumen-core"))
-    // implementation(project(":lumen-view"))
-    // implementation(project(":lumen-transform"))
+    // Lumen 模块（本地开发直接依赖，发布后使用 BOM）
+    implementation(project(":lumen-core"))
+    implementation(project(":lumen-view"))
+    implementation(project(":lumen-transform"))
+    implementation(project(":lumen-compose"))  // Compose 支持
     
     // AndroidX
     implementation(libs.androidx.core.ktx)

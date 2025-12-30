@@ -6,16 +6,14 @@ plugins {
     alias(libs.plugins.maven.publish) apply false
 }
 
-// 统一版本管理
-// 优先使用LIBRARY_VERSION_NAME（组件版本），如果没有则使用VERSION_NAME
-val versionName: String = project.findProperty("LIBRARY_VERSION_NAME") as String?
-    ?: project.findProperty("VERSION_NAME") as String?
-    ?: "1.0.0"
-
-// 为所有子项目应用版本
-subprojects {
-    version = versionName
-}
+// 注意：各模块独立管理版本和发布
+// 每个模块可以通过以下方式设置版本（优先级从高到低）：
+// 1. 模块特定版本属性（如 LUMEN_CORE_VERSION）
+// 2. LIBRARY_VERSION_NAME 属性（用于指定特定模块版本）
+// 3. VERSION_NAME 属性（用于统一版本）
+// 4. 默认值 "1.0.0"
+// 
+// BOM 模块（lumen）用于版本协调，通过 constraints 定义兼容的版本组合
 
 // 应用发布任务优化配置
 apply(from = "publish-tasks.gradle.kts")

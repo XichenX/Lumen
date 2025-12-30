@@ -9,7 +9,6 @@
 ![Android](https://img.shields.io/badge/Android-API%2024+-green?style=flat&logo=android)
 ![License](https://img.shields.io/badge/License-Apache%202.0-yellow?style=flat)
 ![Maven Central](https://img.shields.io/maven-central/v/io.github.xichenx/lumen?label=Maven%20Central&style=flat)
-![JitPack](https://img.shields.io/jitpack/v/github/xichenx/lumen?label=JitPack&style=flat)
 
 **一个 Kotlin-first 的 Android 图片加载库，面向业务友好、AI 场景、列表场景**
 
@@ -140,6 +139,10 @@
 
 ### 1. 添加依赖
 
+Lumen 使用 **BOM (Bill of Materials)** 进行版本管理，允许你选择需要的 UI 模块。
+
+#### XML/View 项目
+
 **Maven Central（推荐）：**
 
 ```kotlin
@@ -148,25 +151,45 @@ repositories {
 }
 
 dependencies {
-    implementation("io.github.xichenx:lumen:0.0.1")
+    // BOM 用于版本管理
+    implementation(platform("io.github.xichenx:lumen-bom:1.0.0"))
+    
+    // 核心模块（必需）
+    implementation("io.github.xichenx:lumen-core")
+    
+    // View 模块，用于 XML/View 项目
+    implementation("io.github.xichenx:lumen-view")
+    
+    // Transform 模块（可选，用于图片转换）
+    implementation("io.github.xichenx:lumen-transform")
 }
 ```
 
-**JitPack（备选）：**
+#### Compose 项目
 
 ```kotlin
 repositories {
-    maven { url = uri("https://jitpack.io") }
+    mavenCentral()
 }
 
 dependencies {
-    implementation("com.github.xichenx:lumen:0.0.1")
+    // BOM 用于版本管理
+    implementation(platform("io.github.xichenx:lumen-bom:1.0.0"))
+    
+    // 核心模块（必需）
+    implementation("io.github.xichenx:lumen-core")
+    
+    // Compose 模块，用于 Jetpack Compose 项目
+    implementation("io.github.xichenx:lumen-compose")
+    
+    // Transform 模块（可选，用于图片转换）
+    implementation("io.github.xichenx:lumen-transform")
 }
 ```
 
-> **注意：** Maven Central 和 JitPack 使用相同的版本号，可以无缝切换。唯一的区别是 `groupId`：
-> - Maven Central: `io.github.xichenx:lumen:0.0.1`
-> - JitPack: `com.github.xichenx:lumen:0.0.1`
+> **注意：** 
+> - BOM 确保所有模块使用兼容的版本
+> - 你必须**显式选择** `lumen-view`（XML）或 `lumen-compose`（Compose）
 
 ### 2. 添加权限
 
@@ -383,8 +406,18 @@ Lumen.with(context)
 
 ### Jetpack Compose
 
+**注意：** 如需使用 Compose 功能，使用 `lumen-compose` 模块配合 BOM：
+
 ```kotlin
-import com.xichen.lumen.view.compose.LumenImage
+dependencies {
+    implementation(platform("io.github.xichenx:lumen-bom:1.0.0"))
+    implementation("io.github.xichenx:lumen-core")
+    implementation("io.github.xichenx:lumen-compose")
+}
+```
+
+```kotlin
+import com.xichen.lumen.compose.LumenImage
 
 @Composable
 fun ImageScreen() {
@@ -819,36 +852,30 @@ Lumen.with(context)
 
 ## 📦 发布与分发
 
-Lumen 同时发布到 **Maven Central** 和 **JitPack**，并**保证版本号完全一致**。
+Lumen 发布到 **Maven Central**。
 
-### 版本一致性
-
-两个仓库使用**完全相同的版本号**，可以无缝切换：
+### 发布
 
 | 仓库 | Group ID | Artifact ID | 版本 | 状态 |
 |------|----------|-------------|------|------|
 | Maven Central | `io.github.xichenx` | `lumen` | `0.0.1` | ✅ 官方 |
-| JitPack | `com.github.xichenx` | `lumen` | `0.0.1` | ✅ 备选 |
 
 **示例：**
 ```kotlin
-// 两者都使用版本 0.0.1 - 完全可互换！
 implementation("io.github.xichenx:lumen:0.0.1")        // Maven Central
-implementation("com.github.xichenx:lumen:0.0.1")       // JitPack
 ```
 
 ### 优化的发布工作流
 
 我们使用**统一的 GitHub Actions 工作流**，优化发布流程：
 
-- ✅ **单次构建**：构建一次，两个平台复用构建产物
-- ✅ **并行发布**：同时发布到 Maven Central 和 JitPack
-- ✅ **版本同步**：自动确保版本一致性
-- ✅ **时间节省**：通过并行执行减少约 33% 的总时间
+- ✅ **自动化发布**：自动发布到 Maven Central
+- ✅ **版本管理**：每个模块独立版本管理
+- ✅ **BOM 支持**：BOM 用于版本协调
 
 **工作流结构：**
 ```
-预检查 → 构建（一次） → [Maven Central + JitPack]（并行） → 最终化
+预检查 → 构建 → Maven Central → 最终化
 ```
 
 详细发布说明请参阅 [PUBLISH.md](PUBLISH.md)。

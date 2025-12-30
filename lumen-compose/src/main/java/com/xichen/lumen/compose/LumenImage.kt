@@ -1,4 +1,4 @@
-package com.xichen.lumen.view.compose
+package com.xichen.lumen.compose
 
 import android.graphics.Bitmap
 import android.graphics.drawable.AnimatedImageDrawable

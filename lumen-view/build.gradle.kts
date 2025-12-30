@@ -1,10 +1,58 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.compose.compiler)
     alias(libs.plugins.maven.publish)
 }
 
+// 版本配置：优先级 LUMEN_VIEW_VERSION > LIBRARY_VERSION_NAME > VERSION_NAME > 默认值
+val publishVersion: String = run {
+    val moduleVersion = project.findProperty("LUMEN_VIEW_VERSION") as String?
+    val libraryVersion = project.findProperty("LIBRARY_VERSION_NAME") as String?
+    val versionName = project.findProperty("VERSION_NAME") as String?
+    
+    when {
+        !moduleVersion.isNullOrBlank() -> moduleVersion.trim()
+        !libraryVersion.isNullOrBlank() -> libraryVersion.trim()
+        !versionName.isNullOrBlank() -> versionName.trim()
+        else -> "1.0.0"
+    }
+}
+
+version = publishVersion
+logger.info("📦 Publishing lumen-view version: $publishVersion")
+
+// Maven 发布配置
+mavenPublishing {
+    publishToMavenCentral(automaticRelease = true)
+    signAllPublications()
+
+    coordinates("io.github.xichenx", "lumen-view", publishVersion)
+    pom {
+        name.set("Lumen View")
+        description.set("XML View integration for Lumen - A Kotlin-first Android image loading library")
+        inceptionYear.set("2025")
+        url.set("https://github.com/xichenx/lumen/")
+        licenses {
+            license {
+                name.set("The Apache License, Version 2.0")
+                url.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
+                distribution.set("repo")
+            }
+        }
+        developers {
+            developer {
+                id.set("xichen")
+                name.set("刘明智")
+                url.set("https://github.com/xichenx/")
+            }
+        }
+        scm {
+            url.set("https://github.com/xichenx/lumen/")
+            connection.set("scm:git:git://github.com/xichenx/lumen.git")
+            developerConnection.set("scm:git:ssh://git@github.com:xichenx/lumen.git")
+        }
+    }
+}
 
 android {
     namespace = "com.xichen.lumen.view"
@@ -35,12 +83,6 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
-    buildFeatures {
-        compose = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
-    }
 }
 
 dependencies {
@@ -55,16 +97,6 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.recyclerview)
     
-    // Compose
-    implementation(platform(libs.compose.bom))
-    implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.foundation)
-    implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.runtime)
-    implementation(libs.androidx.compose.runtime.livedata)
-    
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
     
@@ -72,5 +104,4 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    debugImplementation(libs.androidx.compose.ui.tooling)
 }

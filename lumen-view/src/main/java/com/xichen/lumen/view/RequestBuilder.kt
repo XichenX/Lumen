@@ -114,7 +114,7 @@ class RequestBuilder(
     /**
      * 构建 ImageRequest
      */
-    internal fun build(context: Context): ImageRequest {
+    fun build(context: Context): ImageRequest {
         val finalPlaceholder = placeholder ?: placeholderResId?.let {
             ContextCompat.getDrawable(context, it)
         }
