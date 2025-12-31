@@ -129,64 +129,68 @@ jobs:
             fi
           fi
           
-          # 确定 BOM 基础版本（遵循分支规则）
-          if [ "$BRANCH_NAME" == "main" ] || [ "$BRANCH_NAME" == "master" ]; then
-            # main分支：从0.0.1开始
-            if [ -z "$CURRENT_BOM" ] || [ "$CURRENT_BOM" == "" ]; then
-              BASE_BOM="0.0.1"
-              echo "📌 main分支：使用起始版本 0.0.1"
-            else
-              # 检查版本是否符合 main 分支规则（应该是 0.x.x）
-              MAJOR_VERSION=$(echo "$CURRENT_BOM" | cut -d'.' -f1)
-              if [ "$MAJOR_VERSION" != "0" ]; then
-                echo "⚠️  警告：version.properties 中的 BOM 版本 $CURRENT_BOM 不符合 main 分支规则（应为 0.x.x），重置为 0.0.1"
+          # 确定 BOM 版本（优先使用手动输入的版本，不受分支规则限制）
+          if [ -n "${{ github.event.inputs.bom_version }}" ]; then
+            # 用户手动输入了版本，直接使用（最高优先级）
+            FINAL_BOM="${{ github.event.inputs.bom_version }}"
+            echo "✅ Using manually specified BOM version: $FINAL_BOM (ignoring branch rules)"
+          else
+            # 没有手动输入，根据分支规则确定基础版本
+            if [ "$BRANCH_NAME" == "main" ] || [ "$BRANCH_NAME" == "master" ]; then
+              # main分支：从0.0.1开始
+              if [ -z "$CURRENT_BOM" ] || [ "$CURRENT_BOM" == "" ]; then
                 BASE_BOM="0.0.1"
+                echo "📌 main分支：使用起始版本 0.0.1"
               else
-                BASE_BOM="$CURRENT_BOM"
-                echo "📌 main分支：使用 version.properties 中的版本 $BASE_BOM"
+                # 检查版本是否符合 main 分支规则（应该是 0.x.x）
+                MAJOR_VERSION=$(echo "$CURRENT_BOM" | cut -d'.' -f1)
+                if [ "$MAJOR_VERSION" != "0" ]; then
+                  echo "⚠️  警告：version.properties 中的 BOM 版本 $CURRENT_BOM 不符合 main 分支规则（应为 0.x.x），重置为 0.0.1"
+                  BASE_BOM="0.0.1"
+                else
+                  BASE_BOM="$CURRENT_BOM"
+                  echo "📌 main分支：使用 version.properties 中的版本 $BASE_BOM"
+                fi
               fi
-            fi
-          elif [[ "$BRANCH_NAME" == v* ]] || [ "$BRANCH_NAME" == "develop" ]; then
-            # 开发分支：必须从分支名称提取版本号
-            if [ -z "$BRANCH_VERSION" ]; then
-              echo "❌ 错误：无法从分支名称 '$BRANCH_NAME' 提取有效版本号"
-              echo "   开发分支名称格式应为：v2.0.0 或 v2.0.0/develop（其中 2.0.0 为版本号）"
-              echo "   当前分支名称不符合格式要求，集成发布失败"
-              exit 1
+            elif [[ "$BRANCH_NAME" == v* ]] || [ "$BRANCH_NAME" == "develop" ]; then
+              # 开发分支：必须从分支名称提取版本号
+              if [ -z "$BRANCH_VERSION" ]; then
+                echo "❌ 错误：无法从分支名称 '$BRANCH_NAME' 提取有效版本号"
+                echo "   开发分支名称格式应为：v2.0.0 或 v2.0.0/develop（其中 2.0.0 为版本号）"
+                echo "   当前分支名称不符合格式要求，集成发布失败"
+                exit 1
+              fi
+              
+              # 有分支版本号，使用分支版本号
+              if [ -z "$CURRENT_BOM" ] || [ "$CURRENT_BOM" == "" ]; then
+                BASE_BOM="$BRANCH_VERSION"
+                echo "📌 开发分支（$BRANCH_NAME）：使用分支起始版本 $BASE_BOM"
+              else
+                # 检查版本是否符合开发分支规则（应该与分支版本号的主版本号一致）
+                CURRENT_MAJOR=$(echo "$CURRENT_BOM" | cut -d'.' -f1)
+                BRANCH_MAJOR=$(echo "$BRANCH_VERSION" | cut -d'.' -f1)
+                if [ "$CURRENT_MAJOR" != "$BRANCH_MAJOR" ]; then
+                  echo "⚠️  警告：version.properties 中的 BOM 版本 $CURRENT_BOM 不符合开发分支规则（应为 $BRANCH_MAJOR.x.x），重置为 $BRANCH_VERSION"
+                  BASE_BOM="$BRANCH_VERSION"
+                else
+                  BASE_BOM="$CURRENT_BOM"
+                  echo "📌 开发分支（$BRANCH_NAME）：使用 version.properties 中的版本 $BASE_BOM"
+                fi
+              fi
+            else
+              # 其他分支：使用当前版本或默认值
+              BASE_BOM=${CURRENT_BOM:-"$DEFAULT_VERSION"}
+              echo "📌 其他分支：使用版本 $BASE_BOM"
             fi
             
-            # 有分支版本号，使用分支版本号
-            if [ -z "$CURRENT_BOM" ] || [ "$CURRENT_BOM" == "" ]; then
-              BASE_BOM="$BRANCH_VERSION"
-              echo "📌 开发分支（$BRANCH_NAME）：使用分支起始版本 $BASE_BOM"
+            # 根据是否自动递增确定最终版本
+            if [ "${{ github.event.inputs.auto_increment }}" == "true" ]; then
+              FINAL_BOM=$(echo "$BASE_BOM" | awk -F. '{printf "%d.%d.%d", $1, $2, $3+1}')
+              echo "✅ Auto increment BOM version: $BASE_BOM -> $FINAL_BOM (branch: $BRANCH_NAME)"
             else
-              # 检查版本是否符合开发分支规则（应该与分支版本号的主版本号一致）
-              CURRENT_MAJOR=$(echo "$CURRENT_BOM" | cut -d'.' -f1)
-              BRANCH_MAJOR=$(echo "$BRANCH_VERSION" | cut -d'.' -f1)
-              if [ "$CURRENT_MAJOR" != "$BRANCH_MAJOR" ]; then
-                echo "⚠️  警告：version.properties 中的 BOM 版本 $CURRENT_BOM 不符合开发分支规则（应为 $BRANCH_MAJOR.x.x），重置为 $BRANCH_VERSION"
-                BASE_BOM="$BRANCH_VERSION"
-              else
-                BASE_BOM="$CURRENT_BOM"
-                echo "📌 开发分支（$BRANCH_NAME）：使用 version.properties 中的版本 $BASE_BOM"
-              fi
+              FINAL_BOM="$BASE_BOM"
+              echo "✅ Using current BOM version: $FINAL_BOM"
             fi
-          else
-            # 其他分支：使用当前版本或默认值
-            BASE_BOM=${CURRENT_BOM:-"$DEFAULT_VERSION"}
-            echo "📌 其他分支：使用版本 $BASE_BOM"
-          fi
-          
-          # Determine BOM version
-          if [ -n "${{ github.event.inputs.bom_version }}" ]; then
-            FINAL_BOM="${{ github.event.inputs.bom_version }}"
-            echo "✅ Using manually specified BOM version: $FINAL_BOM"
-          elif [ "${{ github.event.inputs.auto_increment }}" == "true" ]; then
-            FINAL_BOM=$(echo "$BASE_BOM" | awk -F. '{printf "%d.%d.%d", $1, $2, $3+1}')
-            echo "✅ Auto increment BOM version: $BASE_BOM -> $FINAL_BOM (branch: $BRANCH_NAME)"
-          else
-            FINAL_BOM="$BASE_BOM"
-            echo "✅ Using current BOM version: $FINAL_BOM"
           fi
           
           # Determine module versions (priority: manual input > version.properties > BOM version)
@@ -367,7 +371,7 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Publish all modules to Maven Central
+      - name: Publish BOM to Maven Central (only BOM, not sub-modules)
         id: publish
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.ORG_GRADLE_PROJECT_MAVENCENTRALUSERNAME }}
@@ -382,23 +386,22 @@ jobs:
           VIEW_VERSION="${{ needs.pre-check.outputs.view_version }}"
           COMPOSE_VERSION="${{ needs.pre-check.outputs.compose_version }}"
           
-          echo "📦 Publishing all modules to Maven Central"
+          echo "📦 Publishing BOM to Maven Central (sub-modules already published separately)"
           echo "  BOM: $BOM_VERSION"
-          echo "  core: $CORE_VERSION"
-          echo "  transform: $TRANSFORM_VERSION"
-          echo "  view: $VIEW_VERSION"
-          echo "  compose: $COMPOSE_VERSION"
+          echo "  Note: Sub-modules (core=$CORE_VERSION, transform=$TRANSFORM_VERSION, view=$VIEW_VERSION, compose=$COMPOSE_VERSION) are NOT published here"
+          echo "  They should be published separately using individual module workflows"
           
           # 重试机制：应对网络/发布服务器波动
           MAX_RETRIES=3
           RETRY_COUNT=0
           PUBLISH_SUCCESS="false"
           
-          # 循环重试发布
+          # 循环重试发布（只发布 BOM，不发布子模块）
           until [ $RETRY_COUNT -ge $MAX_RETRIES ]; do
             # 执行发布任务，捕获输出和退出码
+            # 只发布 lumen-bom 模块，不发布子模块
             set +e
-            PUBLISH_OUTPUT=$(./gradlew publishAllToMavenCentral \
+            PUBLISH_OUTPUT=$(./gradlew :lumen-bom:publishToMavenCentral \
                 -PVERSION_NAME="$BOM_VERSION" \
                 -PLUMEN_CORE_VERSION="$CORE_VERSION" \
                 -PLUMEN_TRANSFORM_VERSION="$TRANSFORM_VERSION" \
