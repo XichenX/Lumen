@@ -7,16 +7,16 @@ on:
         description: 'BOM version to publish (e.g., 1.0.0). Leave empty for auto-increment'
         required: false
       core_version:
-        description: 'lumen-core version (leave empty to use BOM version)'
+        description: 'lumen-core version (leave empty to use version from version.properties)'
         required: false
       transform_version:
-        description: 'lumen-transform version (leave empty to use BOM version)'
+        description: 'lumen-transform version (leave empty to use version from version.properties)'
         required: false
       view_version:
-        description: 'lumen-view version (leave empty to use BOM version)'
+        description: 'lumen-view version (leave empty to use version from version.properties)'
         required: false
       compose_version:
-        description: 'lumen-compose version (leave empty to use BOM version)'
+        description: 'lumen-compose version (leave empty to use version from version.properties)'
         required: false
       auto_increment:
         description: 'Auto increment BOM patch version'
@@ -148,25 +148,63 @@ jobs:
             echo "✅ Using current BOM version: $FINAL_BOM"
           fi
           
-          # Determine module versions (use input or fallback to BOM version)
+          # Determine module versions (priority: manual input > version.properties > BOM version)
+          CURRENT_CORE="${{ steps.version_info.outputs.current_core }}"
+          CURRENT_TRANSFORM="${{ steps.version_info.outputs.current_transform }}"
+          CURRENT_VIEW="${{ steps.version_info.outputs.current_view }}"
+          CURRENT_COMPOSE="${{ steps.version_info.outputs.current_compose }}"
+          
           FINAL_CORE="${{ github.event.inputs.core_version }}"
           if [ -z "$FINAL_CORE" ]; then
-            FINAL_CORE="$FINAL_BOM"
+            # 如果用户没有输入，优先使用 version.properties 中的版本
+            if [ -n "$CURRENT_CORE" ] && [ "$CURRENT_CORE" != "" ]; then
+              FINAL_CORE="$CURRENT_CORE"
+              echo "✅ Using current lumen-core version from version.properties: $FINAL_CORE"
+            else
+              FINAL_CORE="$FINAL_BOM"
+              echo "✅ Using BOM version for lumen-core (version.properties not found): $FINAL_CORE"
+            fi
+          else
+            echo "✅ Using manually specified lumen-core version: $FINAL_CORE"
           fi
           
           FINAL_TRANSFORM="${{ github.event.inputs.transform_version }}"
           if [ -z "$FINAL_TRANSFORM" ]; then
-            FINAL_TRANSFORM="$FINAL_BOM"
+            if [ -n "$CURRENT_TRANSFORM" ] && [ "$CURRENT_TRANSFORM" != "" ]; then
+              FINAL_TRANSFORM="$CURRENT_TRANSFORM"
+              echo "✅ Using current lumen-transform version from version.properties: $FINAL_TRANSFORM"
+            else
+              FINAL_TRANSFORM="$FINAL_BOM"
+              echo "✅ Using BOM version for lumen-transform (version.properties not found): $FINAL_TRANSFORM"
+            fi
+          else
+            echo "✅ Using manually specified lumen-transform version: $FINAL_TRANSFORM"
           fi
           
           FINAL_VIEW="${{ github.event.inputs.view_version }}"
           if [ -z "$FINAL_VIEW" ]; then
-            FINAL_VIEW="$FINAL_BOM"
+            if [ -n "$CURRENT_VIEW" ] && [ "$CURRENT_VIEW" != "" ]; then
+              FINAL_VIEW="$CURRENT_VIEW"
+              echo "✅ Using current lumen-view version from version.properties: $FINAL_VIEW"
+            else
+              FINAL_VIEW="$FINAL_BOM"
+              echo "✅ Using BOM version for lumen-view (version.properties not found): $FINAL_VIEW"
+            fi
+          else
+            echo "✅ Using manually specified lumen-view version: $FINAL_VIEW"
           fi
           
           FINAL_COMPOSE="${{ github.event.inputs.compose_version }}"
           if [ -z "$FINAL_COMPOSE" ]; then
-            FINAL_COMPOSE="$FINAL_BOM"
+            if [ -n "$CURRENT_COMPOSE" ] && [ "$CURRENT_COMPOSE" != "" ]; then
+              FINAL_COMPOSE="$CURRENT_COMPOSE"
+              echo "✅ Using current lumen-compose version from version.properties: $FINAL_COMPOSE"
+            else
+              FINAL_COMPOSE="$FINAL_BOM"
+              echo "✅ Using BOM version for lumen-compose (version.properties not found): $FINAL_COMPOSE"
+            fi
+          else
+            echo "✅ Using manually specified lumen-compose version: $FINAL_COMPOSE"
           fi
           
           echo "bom_version=$FINAL_BOM" >> $GITHUB_OUTPUT
