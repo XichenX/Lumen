@@ -63,11 +63,12 @@ jobs:
         id: version_info
         run: |
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
-          CURRENT_BOM=$(grep "^VERSION_NAME=" gradle.properties 2>/dev/null | cut -d'=' -f2 || echo "")
-          CURRENT_CORE=$(grep "^LUMEN_CORE_VERSION=" gradle.properties 2>/dev/null | cut -d'=' -f2 || echo "")
-          CURRENT_TRANSFORM=$(grep "^LUMEN_TRANSFORM_VERSION=" gradle.properties 2>/dev/null | cut -d'=' -f2 || echo "")
-          CURRENT_VIEW=$(grep "^LUMEN_VIEW_VERSION=" gradle.properties 2>/dev/null | cut -d'=' -f2 || echo "")
-          CURRENT_COMPOSE=$(grep "^LUMEN_COMPOSE_VERSION=" gradle.properties 2>/dev/null | cut -d'=' -f2 || echo "")
+          # 从 version.properties 读取当前版本
+          CURRENT_BOM=$(grep "^lumen.bom.version=" version.properties 2>/dev/null | cut -d'=' -f2 | xargs || echo "")
+          CURRENT_CORE=$(grep "^lumen.core.version=" version.properties 2>/dev/null | cut -d'=' -f2 | xargs || echo "")
+          CURRENT_TRANSFORM=$(grep "^lumen.transform.version=" version.properties 2>/dev/null | cut -d'=' -f2 | xargs || echo "")
+          CURRENT_VIEW=$(grep "^lumen.view.version=" version.properties 2>/dev/null | cut -d'=' -f2 | xargs || echo "")
+          CURRENT_COMPOSE=$(grep "^lumen.compose.version=" version.properties 2>/dev/null | cut -d'=' -f2 | xargs || echo "")
           
           # 根据分支确定默认版本
           if [ "$BRANCH_NAME" == "main" ] || [ "$BRANCH_NAME" == "master" ]; then
@@ -76,6 +77,23 @@ jobs:
             DEFAULT_VERSION="1.0.0"
           else
             DEFAULT_VERSION="1.0.0"
+          fi
+          
+          # 如果 version.properties 中没有版本，使用默认值
+          if [ -z "$CURRENT_BOM" ]; then
+            CURRENT_BOM="$DEFAULT_VERSION"
+          fi
+          if [ -z "$CURRENT_CORE" ]; then
+            CURRENT_CORE="$DEFAULT_VERSION"
+          fi
+          if [ -z "$CURRENT_TRANSFORM" ]; then
+            CURRENT_TRANSFORM="$DEFAULT_VERSION"
+          fi
+          if [ -z "$CURRENT_VIEW" ]; then
+            CURRENT_VIEW="$DEFAULT_VERSION"
+          fi
+          if [ -z "$CURRENT_COMPOSE" ]; then
+            CURRENT_COMPOSE="$DEFAULT_VERSION"
           fi
           
           echo "current_bom=$CURRENT_BOM" >> $GITHUB_OUTPUT
