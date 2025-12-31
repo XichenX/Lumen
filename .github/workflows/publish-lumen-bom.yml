@@ -322,7 +322,7 @@ jobs:
           echo "  compose: $COMPOSE_VERSION"
           
           ./gradlew clean build test \
-            -PVERSION_NAME=$BOM_VERSION \
+            -PLUMEN_BOM_VERSION=$BOM_VERSION \
             -PLUMEN_CORE_VERSION=$CORE_VERSION \
             -PLUMEN_TRANSFORM_VERSION=$TRANSFORM_VERSION \
             -PLUMEN_VIEW_VERSION=$VIEW_VERSION \
@@ -399,10 +399,10 @@ jobs:
           # 循环重试发布（只发布 BOM，不发布子模块）
           until [ $RETRY_COUNT -ge $MAX_RETRIES ]; do
             # 执行发布任务，捕获输出和退出码
-            # 只发布 lumen-bom 模块，不发布子模块
+            # 只发布 lumen 模块（BOM），不发布子模块
             set +e
-            PUBLISH_OUTPUT=$(./gradlew :lumen-bom:publishToMavenCentral \
-                -PVERSION_NAME="$BOM_VERSION" \
+            PUBLISH_OUTPUT=$(./gradlew :lumen:publishToMavenCentral \
+                -PLUMEN_BOM_VERSION="$BOM_VERSION" \
                 -PLUMEN_CORE_VERSION="$CORE_VERSION" \
                 -PLUMEN_TRANSFORM_VERSION="$TRANSFORM_VERSION" \
                 -PLUMEN_VIEW_VERSION="$VIEW_VERSION" \
@@ -413,11 +413,25 @@ jobs:
             EXIT_CODE=$?
             set -e
             
-            # 核心判断：忽略清理阶段的已知错误，只检查发布核心任务
-            if echo "$PUBLISH_OUTPUT" | grep -q "publishMavenPublicationToMavenCentralRepository" && \
-               ! echo "$PUBLISH_OUTPUT" | grep -qi "failed to deploy\|authentication failed\|signing failed"; then
+            # 保存完整输出用于调试
+            echo "=== 发布输出（尝试 $((RETRY_COUNT + 1))/$MAX_RETRIES）==="
+            echo "$PUBLISH_OUTPUT"
+            echo "=== 发布输出结束 ==="
+            
+            # 检查是否有明确的成功标志
+            if echo "$PUBLISH_OUTPUT" | grep -qi "publishMavenPublicationToMavenCentralRepository.*SUCCESS\|Published\|Deployed\|BUILD SUCCESSFUL"; then
               PUBLISH_SUCCESS="true"
+              echo "✅ 发布成功（检测到成功标志）"
               break
+            fi
+            
+            # 检查是否有明确的失败标志
+            if echo "$PUBLISH_OUTPUT" | grep -qi "BUILD FAILED\|FAILURE\|failed to deploy\|authentication failed\|signing failed"; then
+              echo "❌ 发布失败（检测到失败标志）"
+              # 提取关键错误信息
+              echo "=== 关键错误信息 ==="
+              echo "$PUBLISH_OUTPUT" | grep -iE "error|failed|exception|BUILD FAILED" | head -30
+              echo "=== 错误信息结束 ==="
             fi
             
             # 重试前等待
@@ -430,18 +444,24 @@ jobs:
           
           # 结果处理
           if [ "$PUBLISH_SUCCESS" = "true" ]; then
-            echo "✅ 所有模块成功发布到 Maven Central"
+            echo "✅ BOM 版本 $BOM_VERSION 成功发布到 Maven Central"
             echo "publish_success=true" >> $GITHUB_OUTPUT
             # 兼容插件清理阶段的已知错误
             if [ $EXIT_CODE -ne 0 ]; then
               echo "⚠️  构建退出码非零，但核心发布任务已完成（插件清理阶段的已知问题）"
               echo "关键日志片段："
-              echo "$PUBLISH_OUTPUT" | grep -E "Published|Signed|Deployed" | tail -20
+              echo "$PUBLISH_OUTPUT" | grep -E "Published|Signed|Deployed|SUCCESS" | tail -20
             fi
           else
-            echo "❌ 发布失败（已重试 $MAX_RETRIES 次）"
-            echo "发布日志（最后 50 行）："
-            echo "$PUBLISH_OUTPUT" | tail -50
+            echo "❌ BOM 发布失败（已重试 $MAX_RETRIES 次）"
+            echo ""
+            echo "=== 完整发布日志 ==="
+            echo "$PUBLISH_OUTPUT"
+            echo "=== 日志结束 ==="
+            echo ""
+            echo "=== 错误摘要 ==="
+            echo "$PUBLISH_OUTPUT" | grep -iE "error|failed|exception|BUILD FAILED" | head -50
+            echo "=== 错误摘要结束 ==="
             echo "publish_success=false" >> $GITHUB_OUTPUT
             exit 1
           fi
